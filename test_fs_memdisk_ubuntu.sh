@@ -4,7 +4,8 @@
 # echo 'GRUB_CMDLINE_LINUX="ramdisk_size=6291456"' >/etc/default/grub
 TESTSIZE="-s 5700m:128k -r 1800m"
 TEST2SIZE="bs=1M count=5400"
-TOLOG="2>>&./test_01_memdisk_bsd.sh"
+LOGFILE="test_fs_memdisk_ubuntu.log"
+exec 1>$LOGFILE 2>&1
 
 new_fs_ext4 ()
 {
@@ -85,8 +86,6 @@ new_fs_zfs ()
 /sbin/zpool list
 /sbin/zpool status
 /sbin/zfs set mountpoint=/mnt/fs mdpool
-#/sbin/zfs get recordsize
-#/sbin/zdb -U /var/tmp/zpool.cache |grep ashift
 /bin/mount |grep mdpool
 /bin/df -H |grep mdpool
 /bin/echo
@@ -100,8 +99,6 @@ new_fs_zfs_checksumoff ()
 /sbin/zpool status
 /sbin/zfs set checksum=off mdpool
 /sbin/zfs set mountpoint=/mnt/fs mdpool
-#/sbin/zfs get recordsize
-#/sbin/zdb -U /var/tmp/zpool.cache |grep ashift
 /bin/mount |grep mdpool
 /bin/df -H |grep mdpool
 /bin/echo
