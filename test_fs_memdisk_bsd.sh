@@ -19,12 +19,11 @@ start_md ()
 
 new_fs_ufs ()
 {
-#start_md
 /bin/echo "Starting newfs $UFS "
 /sbin/newfs $UFS /dev/$DISKDEV
 /sbin/tunefs -p /dev/$DISKDEV
 /sbin/mount /dev/$DISKDEV /mnt/$DISKDEV
-/bin/df -H
+/bin/df -H |grep $DISKDEV
 /bin/echo
 }
 
@@ -33,43 +32,53 @@ stop_fs_ufs ()
 /bin/echo "Stoping $UFS "
 /sbin/umount -f /mnt/$DISKDEV
 /bin/echo
-#stop_md
 }
 
-new_fs_gjournal ()
-{
-start_md
-/bin/echo "Starting newfs gjournal "
-/sbin/gjournal label $DISKDEV
-/sbin/newfs -O2 -J /dev/$DISKDEV.journal
-/sbin/tunefs -p /dev/$DISKDEV
-/sbin/gjournal list
-/sbin/gjournal status -s
-/sbin/mount -o async /dev/$DISKDEV.journal /mnt/$DISKDEV
-/bin/df -H
-/bin/echo
-}
+#new_fs_gjournal ()
+#{
+#/bin/echo "Starting newfs gjournal "
+#/sbin/gjournal label $DISKDEV
+#/sbin/newfs -O2 -J /dev/$DISKDEV.journal
+#/sbin/tunefs -p /dev/$DISKDEV
+#/sbin/gjournal list
+#/sbin/gjournal status -s
+#/sbin/mount -o async /dev/$DISKDEV.journal /mnt/$DISKDEV
+#/bin/df -H
+#/bin/echo
+#}
 
-stop_fs_gjournal ()
-{
-/bin/echo "Stoping fs gjournal "
-/sbin/umount -f /mnt/$DISKDEV
-/sbin/gjournal stop $DISKDEV
-/bin/echo
-stop_md
-}
+#stop_fs_gjournal ()
+#{
+#/bin/echo "Stoping fs gjournal "
+#/sbin/umount -f /mnt/$DISKDEV
+#/sbin/gjournal stop $DISKDEV
+#/bin/echo
+#}
 
 new_fs_zfs ()
 {
-#start_md
 /bin/echo "Starting newfs ZFS "
 /sbin/zpool create mdpool /dev/$DISKDEV
 /sbin/zpool list
 /sbin/zpool status
-/sbin/zfs set mountpoint=none mdpool
-/sbin/zfs get mountpoint mdpool
-/sbin/mount -t zfs mdpool /mnt/$DISKDEV
-/bin/df -H
+/sbin/zfs set mountpoint=/mnt/$DISKDEV mdpool
+#/sbin/zfs get mountpoint mdpool
+#/sbin/mount -t zfs mdpool /mnt/$DISKDEV
+/bin/df -H |grep $DISKDEV
+/bin/echo
+}
+
+new_fs_zfs_checksumoff ()
+{
+/bin/echo "Starting newfs ZFS checksum=off "
+/sbin/zpool create mdpool /dev/$DISKDEV
+/sbin/zpool list
+/sbin/zpool status
+/sbin/zfs set checksum=off mdpool
+/sbin/zfs set mountpoint=/mnt/$DISKDEV mdpool
+#/sbin/zfs get mountpoint mdpool
+#/sbin/mount -t zfs mdpool /mnt/$DISKDEV
+/bin/df -H |grep $DISKDEV
 /bin/echo
 }
 
@@ -162,9 +171,8 @@ test_bonnie
 stop_fs_zfs
 
 # ZFS с checksum=off.
-new_fs_zfs
-#zfs set checksum=off zfs-vasilisc/music
-TESTNAME="-m ZFS"
+new_fs_zfs_checksumoff
+TESTNAME="-m ZFS_checksumoff"
 test_bonnie
 #test_dd
 stop_fs_zfs
