@@ -14,6 +14,7 @@ new_fs_ext4 ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -26,6 +27,7 @@ new_fs_ext3 ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -38,6 +40,7 @@ new_fs_ext2 ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -62,6 +65,7 @@ new_fs_xfs ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -74,6 +78,7 @@ new_fs_jfs ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -111,6 +116,7 @@ new_fs_reiserfs ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -243,7 +249,7 @@ stop_fs_jfs
 
 new_fs_reiserfs
 TESTNAME="-m reiserfs"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_reiserfs
 
