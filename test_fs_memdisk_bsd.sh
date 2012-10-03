@@ -180,7 +180,7 @@ stop_fs_zfs
 /bin/echo
 
 new_fs_zfs
-TESTNAME="-m ZFS"
+TESTNAME="-m ZFS no prefetch"
 #test_bonnie
 #test_dd
 stop_fs_zfs
