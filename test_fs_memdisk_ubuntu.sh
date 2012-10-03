@@ -107,6 +107,18 @@ new_fs_zfs_checksumoff ()
 /bin/echo
 }
 
+new_fs_reiserfs ()
+{
+/bin/echo "Starting newfs reiserfs "
+/sbin/mkfs.reiserfs /dev/ram0 <<EOF
+y
+EOF
+/bin/mount /dev/ram0 /mnt/fs
+/bin/mount |grep ram
+/bin/df -H |grep ram
+/bin/echo
+}
+
 stop_fs_ext4 ()
 {
 /bin/echo "Stoping newfs ext4 "
@@ -143,6 +155,13 @@ umount -f /mnt/fs
 }
 
 stop_fs_jfs ()
+{
+/bin/echo "Stoping newfs jfs "
+umount -f /mnt/fs
+/bin/echo
+}
+
+stop_fs_reiserfs ()
 {
 /bin/echo "Stoping newfs jfs "
 umount -f /mnt/fs
@@ -197,49 +216,55 @@ test_dd ()
 
 new_fs_ext4
 TESTNAME="-m ext4"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_ext4
 
 new_fs_ext3
 TESTNAME="-m ext3"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_ext3
 
 new_fs_ext2
 TESTNAME="-m ext2"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_ext2
 
 new_fs_xfs
 TESTNAME="-m xfs"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_xfs
 
 new_fs_jfs
 TESTNAME="-m jfs"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_jfs
 
+new_fs_reiserfs
+TESTNAME="-m reiserfs"
+test_bonnie
+#test_dd
+stop_fs_reiserfs
+
 new_fs_zfs
 TESTNAME="-m zfs"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_zfs
 
 new_fs_zfs_checksumoff
 TESTNAME="-m zfs_checksumoff"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_zfs_checksumoff
 
 new_fs_btrfs
 TESTNAME="-m btrfs"
-test_bonnie
+#test_bonnie
 #test_dd
 stop_fs_btrfs
 
