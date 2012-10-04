@@ -137,7 +137,7 @@ EOF
 stop_fs_ext4 ()
 {
 /bin/echo "Stoping newfs ext4 "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
@@ -151,56 +151,56 @@ if [ "x$pids" != "x" ] ; then
 fi
 /bin/sleep 5
 /bin/echo "Stoping newfs ext4 "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_ext3 ()
 {
 /bin/echo "Stoping newfs ext3 "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_ext2 ()
 {
 /bin/echo "Stoping newfs ext2 "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_btrfs ()
 {
 /bin/echo "Stoping newfs btrfs "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_xfs ()
 {
 /bin/echo "Stoping newfs xfs "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_jfs ()
 {
 /bin/echo "Stoping newfs jfs "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_reiserfs ()
 {
 /bin/echo "Stoping newfs jfs "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/echo
 }
 
 stop_fs_zfs ()
 {
 /bin/echo "Stoping newfs zfs "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/sleep 5
 /sbin/zpool destroy mdpool
 /bin/echo
@@ -209,7 +209,7 @@ umount -f /mnt/fs
 stop_fs_zfs_checksumoff ()
 {
 /bin/echo "Stoping newfs zfs checksum=off "
-umount -f /mnt/fs
+/bin/umount -f /mnt/fs
 /bin/sleep 5
 /sbin/zpool destroy mdpool
 /bin/echo
