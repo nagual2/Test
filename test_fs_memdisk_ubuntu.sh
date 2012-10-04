@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # Создаем диск в памяти на 6 гиг (всего 8) итого системе остаётся 2гига.
-# echo 'GRUB_CMDLINE_LINUX="ramdisk_size=6291456"' >/etc/default/grub
-TESTSIZE="-s 5700m:128k -r 1800m"
-TEST2SIZE="bs=1M count=5400"
+# echo 'GRUB_CMDLINE_LINUX="ramdisk_size=7340032"' >/etc/default/grub
+# update-grub
+TESTSIZE="-s 6600m:128k -r 800m"
+TEST2SIZE="bs=1M count=6600"
 LOGFILE="test_fs_memdisk_ubuntu.log"
 exec 1>$LOGFILE 2>&1
 
@@ -18,6 +19,21 @@ EOF
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
+}
+
+new_fs_ext4_defrag ()
+{
+/bin/echo "Starting newfs ext4 defrag "
+/sbin/mkfs.ext4 /dev/ram0 <<EOF
+y
+EOF
+/bin/mount /dev/ram0 /mnt/fs
+/sbin/tune2fs -l /dev/ram0
+/bin/mount |grep ram
+/bin/df -H |grep ram
+/bin/echo
+/bin/echo "Starting defrag "
+./defrag.sh &
 }
 
 new_fs_ext3 ()
@@ -40,7 +56,6 @@ new_fs_ext2 ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
-/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -65,7 +80,6 @@ new_fs_xfs ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
-/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -78,7 +92,6 @@ new_fs_jfs ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
-/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -98,7 +111,7 @@ new_fs_zfs ()
 
 new_fs_zfs_checksumoff ()
 {
-/bin/echo "Starting newfs ZFS checksum=off"
+/bin/echo "Starting newfs ZFS checksum=off "
 /sbin/zpool create mdpool /dev/ram0
 /sbin/zpool list
 /sbin/zpool status
@@ -116,7 +129,6 @@ new_fs_reiserfs ()
 y
 EOF
 /bin/mount /dev/ram0 /mnt/fs
-/sbin/tune2fs -l /dev/ram0
 /bin/mount |grep ram
 /bin/df -H |grep ram
 /bin/echo
@@ -124,6 +136,20 @@ EOF
 
 stop_fs_ext4 ()
 {
+/bin/echo "Stoping newfs ext4 "
+umount -f /mnt/fs
+/bin/echo
+}
+
+stop_fs_ext4_defrag ()
+{
+/bin/echo "Stoping defrag "
+pids=`ps axw |grep "/bin/sh ./defrag.sh" | grep -v grep | awk '{print ($1)}'`
+if [ "x$pids" != "x" ] ; then
+    echo "kill $pids"
+    /bin/kill -9 $pids
+fi
+/bin/sleep 5
 /bin/echo "Stoping newfs ext4 "
 umount -f /mnt/fs
 /bin/echo
@@ -175,7 +201,7 @@ stop_fs_zfs ()
 {
 /bin/echo "Stoping newfs zfs "
 umount -f /mnt/fs
-sleep 5
+/bin/sleep 5
 /sbin/zpool destroy mdpool
 /bin/echo
 }
@@ -184,7 +210,7 @@ stop_fs_zfs_checksumoff ()
 {
 /bin/echo "Stoping newfs zfs checksum=off "
 umount -f /mnt/fs
-sleep 5
+/bin/sleep 5
 /sbin/zpool destroy mdpool
 /bin/echo
 }
@@ -219,55 +245,61 @@ test_dd ()
 
 new_fs_ext4
 TESTNAME="-m ext4"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_ext4
 
+new_fs_ext4_defrag
+TESTNAME="-m ext4_defrag"
+test_bonnie
+#test_dd
+stop_fs_ext4_defrag
+
 new_fs_ext3
 TESTNAME="-m ext3"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_ext3
 
 new_fs_ext2
 TESTNAME="-m ext2"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_ext2
 
 new_fs_xfs
 TESTNAME="-m xfs"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_xfs
 
 new_fs_jfs
 TESTNAME="-m jfs"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_jfs
 
 new_fs_reiserfs
 TESTNAME="-m reiserfs"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_reiserfs
 
 new_fs_zfs
 TESTNAME="-m zfs"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_zfs
 
 new_fs_zfs_checksumoff
-TESTNAME="-m zfs_checksumoff"
-#test_bonnie
+TESTNAME="-m zfs_checksum_off"
+test_bonnie
 #test_dd
 stop_fs_zfs_checksumoff
 
 new_fs_btrfs
 TESTNAME="-m btrfs"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_btrfs
 

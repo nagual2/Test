@@ -2,9 +2,9 @@
 
 # Создаем диск в памяти на 6 гиг (всего 8) итого системе остаётся 2 гига.
 DISKDEV="md0"
-DISKSIZE="6G"
-TESTSIZE="-s 5700m:128k -r 1800m"
-TEST2SIZE="bs=1M count=5400"
+DISKSIZE="7G"
+TESTSIZE="-s 6600m:128k -r 800m"
+TEST2SIZE="bs=1M count=6600"
 LOGFILE="test_fs_memdisk_bsd.log"
 exec 1>$LOGFILE 2>&1
 
@@ -19,7 +19,7 @@ start_md ()
 
 new_fs_ufs ()
 {
-/bin/echo "Starting newfs $UFS "
+/bin/echo "Starting newfs UFS $UFS "
 /sbin/newfs $UFS /dev/$DISKDEV
 /sbin/tunefs -p /dev/$DISKDEV
 /sbin/mount /dev/$DISKDEV /mnt/fs
@@ -29,7 +29,7 @@ new_fs_ufs ()
 
 stop_fs_ufs ()
 {
-/bin/echo "Stoping $UFS "
+/bin/echo "Stoping UFS $UFS "
 /sbin/umount -f /mnt/fs
 /bin/echo
 }
@@ -62,7 +62,7 @@ new_fs_zfs ()
 /sbin/zpool list
 /sbin/zpool status
 /sbin/zfs set mountpoint=/mnt/fs mdpool
-/bin/df -H |grep $DISKDEV
+/bin/df -H |grep mdpool
 /bin/echo
 }
 
@@ -74,7 +74,7 @@ new_fs_zfs_checksumoff ()
 /sbin/zpool status
 /sbin/zfs set checksum=off mdpool
 /sbin/zfs set mountpoint=/mnt/fs mdpool
-/bin/df -H |grep $DISKDEV
+/bin/df -H |grep mdpool
 /bin/echo
 }
 
@@ -127,29 +127,29 @@ start_md
 
 UFS="-O2"
 new_fs_ufs
-TESTNAME="-m UFS -O2"
-#test_bonnie
+TESTNAME="-m UFS-O2"
+test_bonnie
 #test_dd
 stop_fs_ufs
 
 UFS="-O2 -U"
 new_fs_ufs
-TESTNAME="-m UFS -O2 -U"
-#test_bonnie
+TESTNAME="-m UFS-O2-U"
+test_bonnie
 #test_dd
 stop_fs_ufs
 
 UFS="-O2 -U -j"
 new_fs_ufs
-TESTNAME="-m UFS -O2 -U -j"
-#test_bonnie
+TESTNAME="-m UFS-O2-U-j"
+test_bonnie
 #test_dd
 stop_fs_ufs
 
 UFS="-O2 -U -j -t"
 new_fs_ufs
-TESTNAME="-m UFS -O2 -U -j -t"
-#test_bonnie
+TESTNAME="-m UFS-O2-U-j-t"
+test_bonnie
 #test_dd
 stop_fs_ufs
 
@@ -164,14 +164,14 @@ sysctl vfs.zfs.prefetch_disable=0
 
 new_fs_zfs
 TESTNAME="-m ZFS"
-#test_bonnie
+test_bonnie
 #test_dd
 stop_fs_zfs
 
 # ZFS с checksum=off.
 new_fs_zfs_checksumoff
-TESTNAME="-m ZFS no checksum"
-#test_bonnie
+TESTNAME="-m ZFS_no_checksum"
+test_bonnie
 #test_dd
 stop_fs_zfs
 
@@ -180,14 +180,14 @@ stop_fs_zfs
 /bin/echo
 
 new_fs_zfs
-TESTNAME="-m ZFS no prefetch"
-#test_bonnie
+TESTNAME="-m ZFS_no_prefetch"
+test_bonnie
 #test_dd
 stop_fs_zfs
 
 new_fs_zfs_checksumoff
-TESTNAME="-m ZFS no checksum & no prefetch"
-#test_bonnie
+TESTNAME="-m ZFS_no_checksum_&_no_prefetch"
+test_bonnie
 #test_dd
 stop_fs_zfs
 
