@@ -6,8 +6,8 @@ VERSION="test_fs_bsd.sh v0.01"
 # Внимание данные на диске будут утеряны. Диск будет перезаписан.
 DISKDEV="da1" # !!!
 DISKSIZE="20G"
-TESTSIZE="-s 6600m:128k -r 800m"
-TEST2SIZE="bs=1M count=6600"
+TESTSIZE="-s 19g:128k -r 800m"
+TEST2SIZE="bs=1M count=19922944"
 LOGFILE="test_fs_bsd.log"
 exec 1>$LOGFILE 2>&1
 /bin/echo $VERSION
