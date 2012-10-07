@@ -12,6 +12,9 @@ LOGFILE="test_fs_bsd.log"
 exec 1>$LOGFILE 2>&1
 /bin/echo $VERSION
 /bin/echo
+/sbin/dmesg |grep $DISKDEV
+/sbin/fdisk -s /dev/$DISKDEV
+/bin/mkdir -p /mnt/fs
 
 new_fs_ufs ()
 {
@@ -22,8 +25,6 @@ new_fs_ufs ()
 /sbin/gpart show $DISKDEV
 /sbin/newfs $UFS /dev/${DISKDEV}p1
 /sbin/tunefs -p /dev/${DISKDEV}p1
-/bin/mkdir -p /mnt/fs
-/bin/chmod 777 /mnt/fs
 /sbin/mount /dev/${DISKDEV}p1 /mnt/fs
 /sbin/mount
 /bin/df -H
@@ -48,8 +49,6 @@ new_fs_ufs4k ()
 /sbin/gpart show $DISKDEV
 /sbin/newfs $UFS -f 4096 /dev/${DISKDEV}p1
 /sbin/tunefs -p /dev/${DISKDEV}p1
-/bin/mkdir -p /mnt/fs
-/bin/chmod 777 /mnt/fs
 /sbin/mount /dev/${DISKDEV}p1 /mnt/fs
 /sbin/mount
 /bin/df -H

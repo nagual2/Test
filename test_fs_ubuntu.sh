@@ -16,6 +16,9 @@ exec 1>$LOGFILE 2>&1
 /sbin/fdisk -l /dev/$DISKDEV
 /sbin/pvdisplay /dev/$DISKDEV
 /bin/mkdir -p /mnt/fs
+/bin/echo "less /etc/mke2fs.conf"
+/bin/less /etc/mke2fs.conf
+/bin/echo
 
 new_fs_ext4 ()
 {

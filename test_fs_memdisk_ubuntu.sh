@@ -11,6 +11,10 @@ LOGFILE="test_fs_memdisk_ubuntu.log"
 exec 1>$LOGFILE 2>&1
 /bin/echo $VERSION
 /bin/echo
+/bin/mkdir -p /mnt/fs
+/bin/echo "less /etc/mke2fs.conf"
+/bin/less /etc/mke2fs.conf
+/bin/echo
 
 new_fs_ext4 ()
 {
