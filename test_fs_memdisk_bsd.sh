@@ -1,5 +1,7 @@
 #!/bin/sh
 
+VERSION="test_fs_memdisk_bsd.sh v0.02"
+
 # Создаем диск в памяти на 6 гиг (всего 8) итого системе остаётся 2 гига.
 DISKDEV="md0"
 DISKSIZE="7G"
@@ -7,6 +9,8 @@ TESTSIZE="-s 6600m:128k -r 800m"
 TEST2SIZE="bs=1M count=6600"
 LOGFILE="test_fs_memdisk_bsd.log"
 exec 1>$LOGFILE 2>&1
+/bin/echo $VERSION
+/bin/echo
 
 start_md ()
 {
@@ -37,7 +41,7 @@ stop_fs_ufs ()
 new_fs_gjournal ()
 {
 /bin/echo "Starting newfs gjournal "
-/sbin/gjournal label $DISKDEV
+/sbin/gjournal label $DISKDEV # -s 400m  ?
 /sbin/newfs -O2 -J /dev/$DISKDEV.journal
 /sbin/tunefs -p /dev/$DISKDEV
 /sbin/gjournal list

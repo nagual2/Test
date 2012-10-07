@@ -1,5 +1,7 @@
 #!/bin/sh
 
+VERSION="test_fs_memdisk_ubuntu.sh v0.02"
+
 # Создаем диск в памяти на 7 гиг (всего 8) итого системе остаётся 1 гига.
 # echo 'GRUB_CMDLINE_LINUX="ramdisk_size=7340032"' >/etc/default/grub
 # update-grub
@@ -7,6 +9,8 @@ TESTSIZE="-s 6600m:128k -r 800m"
 TEST2SIZE="bs=1M count=6600"
 LOGFILE="test_fs_memdisk_ubuntu.log"
 exec 1>$LOGFILE 2>&1
+/bin/echo $VERSION
+/bin/echo
 
 new_fs_ext4 ()
 {
