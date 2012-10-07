@@ -308,7 +308,7 @@ test_bonnie
 stop_fs_btrfs
 
 #stop
-
+exit 0
 
 
 

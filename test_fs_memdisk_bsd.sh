@@ -195,8 +195,8 @@ test_bonnie
 #test_dd
 stop_fs_zfs
 
+#stop
 stop_md
-
 exit 0
 
 

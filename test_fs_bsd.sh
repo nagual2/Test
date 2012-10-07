@@ -309,6 +309,7 @@ TESTNAME="-m ZFS4k_no_checksum_&_no_prefetch"
 #test_dd
 stop_fs_zfs4k
 
+#stop
 exit 0
 
 
