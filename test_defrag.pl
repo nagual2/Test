@@ -27,7 +27,7 @@ use strict;
 use warnings;
 use v5.14;
 use Data::Dumper;
-use Time::HiRes;
+use Time::HiRes qw(gettimeofday tv_interval usleep);
 use threads;
 use Thread::Queue::Any;
 use IO::AIO;
@@ -63,11 +63,11 @@ sub thread_boss {
     my $offset;		# Смещение от начала ($content).
     my $length;		# Длина записи.
     my $dataoffset;	# Смещение от начала записываемого файла.
-    my $time_start;	# Время старта операции.
-    my $time_stop;	# Время завершения операции.
+#    my $time_start;	# Время старта операции.
+#    my $time_stop;	# Время завершения операции.
     while (defined( my $job=$answerreq->pending())) {
 	# Не ждем результаты.
-	my ($old_task,$old_type,$old_offset,$old_length,$old_dataoffset)= $queue->dequeue_dontwait;
+	my ($old_task,$old_type,$old_length,$time_start,$time_stop)= $queue->dequeue_dontwait;
 	if (defined $old_task) {
 	    # Обрабатываем результаты.    
 	
@@ -84,7 +84,9 @@ sub thread_boss {
 #	$text[int(rand($tsize))],
 
 
-	$taskreq->enqueue();
+	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
+	$task++;
+	
 	
 	$taskreq->enqueue(undef);
     }
@@ -96,9 +98,9 @@ sub thread_worker {
     my $tid = $self->tid();
     while  ($taskreq->pending()) {
 	# Ждем задание.
-	my ()= $taskreq->dequeue;
-	
-	usleep (1000);
+	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
+	my $time_start = [gettimeofday]; # Время старта операции.
+	usleep (1000); # Для тестирования.
 
 #    aio_write $fh,$offset,$length, $data,$dataoffset, $callback->($retval)
 #    aio_read $fh, 7, 15, $buffer, 0, sub {
@@ -107,7 +109,8 @@ sub thread_worker {
 #    };
 
 	# Отправляем отчет.
-	$answerreq->enqueue();
+	my $time_stop = [gettimeofday]; # Время завершения операции.
+	$answerreq->enqueue($task,$type,$length,$time_start,$time_stop);
     }
     $answerreq->enqueue(undef); # Закрываем канал отчетов.
     # Наверно этот вариант не подойдет и ориентировать стоит на колличество
