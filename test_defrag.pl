@@ -85,7 +85,9 @@ sub thread_boss {
     my $exit=0;		# Условие выхода ( 1 - выход). 
     $all->{'file_size'}=0;					# Можно подсчетать.
     $all->{'free_space'}=$all_space-$all->{'file_size'};	# Можно подсчитать.
-    while (defined( my $job=$answerreq->pending())) {
+    while (not $exit) {
+
+    
         "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
 	next if $exit;
 	# Не ждем результаты.
@@ -112,6 +114,7 @@ sub thread_boss {
 	} else {
 	    print "нет результата.\n";
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
+	    my $job=$answerreq->pending();
 	    if ($job==$max_threads) {
 		print "Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n";
 		"[$$]: Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n" >> io($logfile) if $DEBUG;
@@ -171,9 +174,9 @@ sub thread_boss {
 	# Закрываем обработчиков.
 	if (($task>=$max_task)||($exit)) {
 	    $exit=1;
-	    print "Закрываем обработчиков.\n";
-	    "[$$]: Закрываем обработчиков.\n" >> io($logfile) if $DEBUG;
-	    $taskreq->enqueue(undef);
+#	    print "Закрываем обработчиков.\n";
+#	    "[$$]: Закрываем обработчиков.\n" >> io($logfile) if $DEBUG;
+#	    $taskreq->enqueue(undef);
 	}
     }
     print "Закрываем контролёра.\n";
@@ -186,7 +189,9 @@ sub thread_worker {
     "[$$]: Запуск обработчика.\n" >> io($logfile) if $DEBUG;
     my $self = threads->self(); 
     my $tid = $self->tid();
-    while (defined (my $job=$taskreq->pending())) {
+    while (my $job=$taskreq->pending()) {
+	print "[$$] $job ".Dumper($job);
+	"[$$] $job ".Dumper($job) >> io($logfile) if $DEBUG;
 	# Ждем задание.
 	print "Ждем задание: ";
 	"[$$]: Ждем задание:\n" >> io($logfile) if $DEBUG;
@@ -219,8 +224,8 @@ sub thread_worker {
 	"[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
     }
     # Закрываем канал отчетов.
-    "[$$]: Закрываем канал отчетов.\n" >> io($logfile) if $DEBUG;
-    $answerreq->enqueue(undef) for (1..$max_threads);
+#    "[$$]: Закрываем канал отчетов.\n" >> io($logfile) if $DEBUG;
+#    $answerreq->enqueue(undef) for (1..$max_threads);
     # Наверно этот вариант не подойдет и ориентировать стоит на колличество
     # обработчиков.
 #    threads->exit();
@@ -232,6 +237,7 @@ print "Создаём наш тестовый файл: $file\n";
 "[$$]: Создаём наш тестовый файл: $file\n" >> io($logfile) if $DEBUG;
 aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONBLOCK,0644,sub {
     $fh = shift or die "error while opening: $!";
+    close $fh;
 };
 
 # Запускаем контрллер.
@@ -250,10 +256,13 @@ print "Ждем завершения контролёра.\n";
 "[$$]: Ждем завершения контролёра.\n" >> io($logfile) if $DEBUG;
 $boss->join(); # Ждем завершения контролёра.
 
+foreach my $thread (@threads) {
+    $thread->join();
+}
+
 # Закрываем наш файл
 print "Закрываем и удаляем наш файл.\n";
 "[$$]: Закрываем и удаляем наш файл.\n" >> io($logfile) if $DEBUG;
-close $fh;
 unlink $file;
 #-----------------------------------------------------------------------------
 
