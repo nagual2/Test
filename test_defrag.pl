@@ -55,6 +55,10 @@ aio_open $data, IO::AIO::O_RDONLY, 0, sub {
 };
 # Ждем завершения.
 IO::AIO::flush;
+if ($real_length_data<$length_data) {
+    print "Мало памяти для тестирования.\n";
+    exit 0;
+}
 #-----------------------------------------------------------------------------
 # Контроллёр.
 sub thread_boss { 
@@ -81,43 +85,44 @@ sub thread_boss {
 	    $all->{$old_task}{'start_microseconds'}=$start_microseconds;
 	    $all->{$old_task}{'stop_seconds'}=$stop_seconds;
 	    $all->{$old_task}{'stop_microseconds'}=$stop_microseconds;
-	    $all->{$old_task}{'time_diff'}=tv_interval $start_seconds $start_microseconds $stop_seconds $stop_microseconds;	    
+	    $all->{$old_task}{'time_diff'}=tv_interval ([$start_seconds,$start_microseconds],[$stop_seconds,$stop_microseconds]);
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
 	    $all->{'file_size'}+=$old_length if $old_type; 	# Если запись добавляем.
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
+	} else {
+	    if ($job==$max_threads) {
+		usleep (10);
+		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
+	    } #else { 		# Ставим задания.	    }
+	}
+	
 	    # Ставим задания.
 	    $type=int rand 2; 					# 0 - чтение, 1 - запись.
 	    if ($type){
+		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
+		$offset=int rand $all->{'file_size'};
+		$length=int rand ($all->{'file_size'}-$offset);
 		# Чтение (не может быть за пределами файла.)				
-		$offset=int rand $real_length_data; 		# 0 - $real_length_data
-		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)
-		
+		$dataoffset=0;					# 0 так как чтение.
 	    }else{
+		$offset=int rand $real_length_data; 		# 0 - $real_length_data
+		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)	    
 		# Запись.
 	        # Возможны два режима:
 		# 1) Диск еще не забит полностью и мы дописываем.
 	        # 2) Диск забит полностью и пишем в середину.
 		if ($all->{'free_space'}) {
-		    # Свободного мета нет - пишем в середину;
+		    # Свободного мета нет - пишем в середину.
 	    	    $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
+	    	    $length=$all->{'file_size'}-$dataoffset if ($length > $all->{'file_size'}-$dataoffset);
 	        }else{
-	    
+	            # Свободное мето есть.
+	            # $dataoffset < $all->{'file_size'}+$all->{'free_space'} 
+	            # $dataoffset+$length < $all->{'free_space'}
+		    $dataoffset=int rand($all->{'file_size'}+$all->{'free_space'});
+		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
 		}
 	    }	
-
-	} else {
-	    if ($job==$max_threads) {
-		usleep (10);
-		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
-	    } else {
-		# Ставим задания.
-		$type=int rand 2; 				# 0 - чтение, 1 - запись.
-	        $offset=int rand $real_length_data; 		# 0 - $real_length_data
-		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)
-#		unless ($all->{'free_space'})
-	        $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size	    
-	    }
-	}
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;	
