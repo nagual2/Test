@@ -62,6 +62,7 @@ if ($real_length_data<$length_data) {
 #-----------------------------------------------------------------------------
 # Контроллёр.
 sub thread_boss { 
+    print "Старт контролёра.\n";
     my $self = threads->self(); 
     my $tid = $self->tid();
     my $task=0; 	# Номер задания.
@@ -76,8 +77,11 @@ sub thread_boss {
     $all->{'free_space'}=0;	# Можно подсчитать.
     while (defined( my $job=$answerreq->pending())) {
 	# Не ждем результаты.
+	print "Не ждём результат\n";
 	my ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)=$answerreq->dequeue_dontwait;
 	if (defined $old_task) {
+	    print "Есть результат:\n";
+	    print "($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n";
 	    # Обрабатываем результаты.
 	    $all->{$old_task}{'type'}=$old_type;
 	    $all->{$old_task}{'length'}=$old_length;
@@ -90,21 +94,24 @@ sub thread_boss {
 	    $all->{'file_size'}+=$old_length if $old_type; 	# Если запись добавляем.
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
 	} else {
+	    print "нет результата.\n";
 	    if ($job==$max_threads) {
 		usleep (10);
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
 	    } #else { 		# Ставим задания.	    }
 	}
-	
+	    print "Ставим задания.\n";
 	    # Ставим задания.
 	    $type=int rand 2; 					# 0 - чтение, 1 - запись.
 	    if ($type){
+		print "Выпало чтение.\n";
 		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
 		$offset=int rand $all->{'file_size'};
 		$length=int rand ($all->{'file_size'}-$offset);
 		# Чтение (не может быть за пределами файла.)				
 		$dataoffset=0;					# 0 так как чтение.
 	    }else{
+	    	print "Выпала запись.\n";
 		$offset=int rand $real_length_data; 		# 0 - $real_length_data
 		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)	    
 		# Запись.
@@ -124,9 +131,11 @@ sub thread_boss {
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
+	print "Сформировано задание:\n";
+	print "($task,$type,$offset,$length,$dataoffset)\n";
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
-	$task++;	
-	$taskreq->enqueue(undef) if (($task>=$max_task)||($exit));
+	$task++;
+	$taskreq->enqueue(undef) if (($task>=$max_task)||($exit)); # Закрываем обработчиков.
     }
 }
 #-----------------------------------------------------------------------------
