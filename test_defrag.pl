@@ -30,6 +30,7 @@ use v5.14;
 use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval usleep);
 use threads;
+use threads::shared;
 use Thread::Queue::Any;
 use IO::AIO;
 use IO::All;
@@ -82,9 +83,10 @@ sub thread_boss {
 #    my $time_start;	# Время старта операции.
 #    my $time_stop;	# Время завершения операции.
     my $exit=0;		# Условие выхода ( 1 - выход). 
-    $all->{'file_size'}=0;	# Можно подсчетать.
-    $all->{'free_space'}=0;	# Можно подсчитать.
+    $all->{'file_size'}=0;					# Можно подсчетать.
+    $all->{'free_space'}=$all_space-$all->{'file_size'};	# Можно подсчитать.
     while (defined( my $job=$answerreq->pending())) {
+        "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
 	next if $exit;
 	# Не ждем результаты.
 	print "Не ждём результат\n";
@@ -93,7 +95,7 @@ sub thread_boss {
 	if (defined $old_task) {
 	    print "Есть результат: ";
 	    print "($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n";
-	    "[$$]: Есть результат: " >> io($logfile) if $DEBUG;
+	    "[$$]: Есть результат:\n" >> io($logfile) if $DEBUG;
 	    "[$$]: ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
 	    # Обрабатываем результаты.
 	    $all->{$old_task}{'type'}=$old_type;
@@ -106,6 +108,7 @@ sub thread_boss {
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
 	    $all->{'file_size'}+=$old_length if $old_type; 	# Если запись добавляем.
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
+	    "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
 	} else {
 	    print "нет результата.\n";
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
@@ -120,7 +123,7 @@ sub thread_boss {
 	    "[$$]: Ставим задания.\n" >> io($logfile) if $DEBUG;
 	    # Ставим задания.
 	    $type=int rand 2; 					# 0 - чтение, 1 - запись.
-	    if ($type){
+	    unless ($type){
 		print "Выпало чтение.\n";
 		"[$$]: Выпало чтение.\n" >> io($logfile) if $DEBUG;
 		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
@@ -137,26 +140,31 @@ sub thread_boss {
 	        # Возможны два режима:
 		# 1) Диск еще не забит полностью и мы дописываем.
 	        # 2) Диск забит полностью и пишем в середину.
-		if ($all->{'free_space'}) {
+		unless ($all->{'free_space'}) {
 		    # Свободного мета нет - пишем в середину.
 		    print "Свободного мета нет - пишем в середину.\n";
 		    "[$$]: Свободного мета нет - пишем в середину.\n" >> io($logfile) if $DEBUG;
 	    	    $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
+	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
 	    	    $length=$all->{'file_size'}-$dataoffset if ($length > $all->{'file_size'}-$dataoffset);
 	        }else{
 	            # Свободное мето есть.
+	            "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
 	            print "Свободное мето есть.\n";
 	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
 	            # $dataoffset < $all->{'file_size'}+$all->{'free_space'} 
 	            # $dataoffset+$length < $all->{'free_space'}
-		    $dataoffset=int rand($all->{'file_size'}+$all->{'free_space'});
+		    $dataoffset=int rand($all->{'file_size'});
 		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
+		    print "\$dataoffset=$dataoffset, $length=$length\n";
+		    "[$$] \$dataoffset=$dataoffset, \$length=$length\n" >> io($logfile) if $DEBUG;
+		    		    
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
 	print "Сформировано задание: ";
 	print "($task,$type,$offset,$length,$dataoffset)\n";
-	"[$$]: Сформировано задание: " >> io($logfile) if $DEBUG;
+	"[$$]: Сформировано задание:\n" >> io($logfile) if $DEBUG;
 	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
@@ -168,6 +176,8 @@ sub thread_boss {
 	    $taskreq->enqueue(undef);
 	}
     }
+    print "Закрываем контролёра.\n";
+    "[$$] Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
 }
 #-----------------------------------------------------------------------------
 # Обработчики.
@@ -179,8 +189,9 @@ sub thread_worker {
     while (defined (my $job=$taskreq->pending())) {
 	# Ждем задание.
 	print "Ждем задание: ";
-	"[$$]: Ждем задание: " >> io($logfile) if $DEBUG;
+	"[$$]: Ждем задание:\n" >> io($logfile) if $DEBUG;
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
+	last unless (defined $task);
 	print "($task,$type,$offset,$length,$dataoffset)\n";
 	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
@@ -202,14 +213,14 @@ sub thread_worker {
 	# Ждем завершения.
 #	IO::AIO::flush;
 	# Отправляем отчет.
-	"[$$]: Отправляем отчет." >> io($logfile) if $DEBUG;
+	"[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
 	my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
 	$answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
-	"[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)" >> io($logfile) if $DEBUG;
+	"[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
     }
     # Закрываем канал отчетов.
-    "[$$]: Закрываем канал отчетов." >> io($logfile) if $DEBUG;
-    $answerreq->enqueue(undef); 
+    "[$$]: Закрываем канал отчетов.\n" >> io($logfile) if $DEBUG;
+    $answerreq->enqueue(undef) for (1..$max_threads);
     # Наверно этот вариант не подойдет и ориентировать стоит на колличество
     # обработчиков.
 #    threads->exit();
@@ -226,13 +237,13 @@ aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONB
 # Запускаем контрллер.
 print "Запускаем контроллер.\n";
 "[$$]: Запускаем контроллер.\n" >> io($logfile) if $DEBUG;
-my $boss = threads->new(&thread_boss);
+my $boss = threads->new(\&thread_boss);
 
 # Запускаем обработчики.
 print "Запускаем обработчики.\n";
 "[$$]: Запускаем обработчики.\n" >> io($logfile) if $DEBUG;
 for (1..$max_threads) {
-    push @threads, threads->new(&thread_worker);
+    push @threads, threads->new(\&thread_worker);
 }
 
 print "Ждем завершения контролёра.\n";
