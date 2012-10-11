@@ -21,6 +21,7 @@
 # |================== ==== -- ------------ ------------------------ ----- ----
 # |____________________________________________________________________________> T (вермя)
 #
+# Где --- это чтение, а === это запись.
 #
 use forks;
 use strict;
@@ -41,6 +42,7 @@ my @threads;
 my $all; 		# Здесь будут результаты.
 my $max_threads=2; 	# Колличество обработчиков.
 my $max_task=10;	# Максимальное колличество заданий.
+my $all_space=1024*1024*1024*20; # Размер свободного места под тесты (должно измеряться).
 #-----------------------------------------------------------------------------
 aio_open $data, IO::AIO::O_RDONLY, 0, sub {
     my $fh = shift or die "error while opening: $!";
@@ -65,30 +67,51 @@ sub thread_boss {
     my $dataoffset;	# Смещение от начала записываемого файла.
 #    my $time_start;	# Время старта операции.
 #    my $time_stop;	# Время завершения операции.
+    my $exit=0;		# Условие выхода ( 1 - выход). 
+    $all->{'file_size'}=0;	# Можно подсчетать.
+    $all->{'free_space'}=0;	# Можно подсчитать.
     while (defined( my $job=$answerreq->pending())) {
 	# Не ждем результаты.
-	my ($old_task,$old_type,$old_length,$time_start,$time_stop)= $queue->dequeue_dontwait;
+	my ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)=$answerreq->dequeue_dontwait;
 	if (defined $old_task) {
-	    # Обрабатываем результаты.    
-	
+	    # Обрабатываем результаты.
+	    $all->{$old_task}{'type'}=$old_type;
+	    $all->{$old_task}{'length'}=$old_length;
+	    $all->{$old_task}{'start_seconds'}=$start_seconds;
+	    $all->{$old_task}{'start_microseconds'}=$start_microseconds;
+	    $all->{$old_task}{'stop_seconds'}=$stop_seconds;
+	    $all->{$old_task}{'stop_microseconds'}=$stop_microseconds;
+	    $all->{$old_task}{'time_diff'}=tv_interval $start_seconds $start_microseconds $stop_seconds $stop_microseconds;	    
+	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
+	    $all->{'file_size'}+=$old_length if $old_type; # Если запись добавляем.
+
+	    # Ставим задания.
+	    $type=int rand 2; 					# 0 - чтение, 1 - запись.
+	    $offset=int rand $real_length_data; 		# 0 - $real_length_data
+	    $length=int rand ($real_length_data-$offset); # 0 - ($real_length_data-$offset)	    
+	    # Возможны два режима:
+	    # 1) Диск еще не забит полностью и мы дописываем.
+	    # 2) Диск забит полностью и пишем в середину.
+	    $dataoffset=int rand ($all->{'file_size'}); # 0 - file_size
+#	$text[int(rand($tsize))],	    
+
 	} else {
 	    if ($job==$max_threads) {
 		usleep (10);
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
 	    } else {
 		# Ставим задания.
-	    
+		$type=int rand 2; 				# 0 - чтение, 1 - запись.
+	        $offset=int rand $real_length_data; 		# 0 - $real_length_data
+		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)
+#		unless ($all->{'free_space'})
+	        $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size	    
 	    }
 	}
-	
-#	$text[int(rand($tsize))],
-
-
+	# Мы сюда не дойдём если у кажого обработчика есть задание.
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
-	$task++;
-	
-	
-	$taskreq->enqueue(undef);
+	$task++;	
+	$taskreq->enqueue(undef) if (($task>=$max_task)||($exit));
     }
 }
 #-----------------------------------------------------------------------------
@@ -99,7 +122,7 @@ sub thread_worker {
     while  ($taskreq->pending()) {
 	# Ждем задание.
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
-	my $time_start = [gettimeofday]; # Время старта операции.
+	my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	usleep (1000); # Для тестирования.
 
 #    aio_write $fh,$offset,$length, $data,$dataoffset, $callback->($retval)
@@ -109,8 +132,8 @@ sub thread_worker {
 #    };
 
 	# Отправляем отчет.
-	my $time_stop = [gettimeofday]; # Время завершения операции.
-	$answerreq->enqueue($task,$type,$length,$time_start,$time_stop);
+	my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
+	$answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
     }
     $answerreq->enqueue(undef); # Закрываем канал отчетов.
     # Наверно этот вариант не подойдет и ориентировать стоит на колличество
