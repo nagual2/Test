@@ -32,6 +32,8 @@ use Time::HiRes qw(gettimeofday tv_interval usleep);
 use threads;
 use Thread::Queue::Any;
 use IO::AIO;
+my $file="/tmp/fs_test01";	# Имя файла для тестирования.
+my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
 my $contents=""; 	# Переменная в которой будет храниться сгенеренные данные.
 my $length_data=1024*1024; 	# Длина данных
@@ -76,11 +78,12 @@ sub thread_boss {
     $all->{'file_size'}=0;	# Можно подсчетать.
     $all->{'free_space'}=0;	# Можно подсчитать.
     while (defined( my $job=$answerreq->pending())) {
+	next if $exit;
 	# Не ждем результаты.
 	print "Не ждём результат\n";
 	my ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)=$answerreq->dequeue_dontwait;
 	if (defined $old_task) {
-	    print "Есть результат:\n";
+	    print "Есть результат: ";
 	    print "($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n";
 	    # Обрабатываем результаты.
 	    $all->{$old_task}{'type'}=$old_type;
@@ -131,11 +134,16 @@ sub thread_boss {
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
-	print "Сформировано задание:\n";
+	print "Сформировано задание: ";
 	print "($task,$type,$offset,$length,$dataoffset)\n";
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
-	$taskreq->enqueue(undef) if (($task>=$max_task)||($exit)); # Закрываем обработчиков.
+	# Закрываем обработчиков.
+	if (($task>=$max_task)||($exit)) {
+	    $exit=1;
+	    print "Закрываем обработчиков.\n";
+	    $taskreq->enqueue(undef);
+	}
     }
 }
 #-----------------------------------------------------------------------------
@@ -143,29 +151,25 @@ sub thread_boss {
 sub thread_worker { 
     my $self = threads->self(); 
     my $tid = $self->tid();
-    while  ($taskreq->pending()) {
+    while (defined (my $job=$taskreq->pending())) {
 	# Ждем задание.
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
 	my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
-	usleep (1000); # Для тестирования.
-
-#	aio_open $data, IO::AIO::O_RDONLY, 0, sub {
-#	    my $fh = shift or die "error while opening: $!";
-	    if($type){
+	usleep (100); # Для тестирования.
+	if($type){
 #	    aio_read $fh,$offset,$length, $data,$dataoffset, $callback->($retval) # $dataoffset=0
 #	    aio_read $fh, 0, $length_data, $contents, 0, sub {
 #	    $_[0] == $length_data or die "short read: $!";
 #    	    close $fh;
 #	    print "Буфер создан, размер: ".$real_length_data."\n";
 #	    };
-	    }else{
+	}else{
 #	    aio_write $fh,$offset,$length, $data,$dataoffset, $callback->($retval)
 #	    aio_read $fh, 7, 15, $buffer, 0, sub {
 #		$_[0] > 0 or die "read error: $!";
 #		print "read $_[0] bytes: <$buffer>\n";
 #	    };
-	    }
-#	};
+	}
 	# Ждем завершения.
 #	IO::AIO::flush;
 	# Отправляем отчет.
@@ -178,6 +182,11 @@ sub thread_worker {
 }
 
 #-----------------------------------------------------------------------------
+# Создаём наш тестовый файл:
+
+aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONBLOCK,0644,sub {
+    $fh = shift or die "error while opening: $!";
+};
 
 #Запускаем контрллер.
 my $boss = threads->new(&thread_boss); 
@@ -189,6 +198,9 @@ for (1..$max_threads) {
 
 $boss->join(); # Ждем завершения контролёра.
 
+#закрываем наш файл
+close $fh;
+unlink $file;
 #-----------------------------------------------------------------------------
 
 # Как то обрабатываем и сохраняем результаты.
