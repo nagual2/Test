@@ -174,17 +174,19 @@ sub thread_boss {
 	# Закрываем обработчиков.
 	if (($task>=$max_task)||($exit)) {
 	    $exit=1;
-#	    print "Закрываем обработчиков.\n";
-#	    "[$$]: Закрываем обработчиков.\n" >> io($logfile) if $DEBUG;
-#	    $taskreq->enqueue(undef);
+	    print "Закрываем обработчиков.\n";
+	    "[$$]: Закрываем обработчиков.\n" >> io($logfile) if $DEBUG;
+	    $taskreq->enqueue(undef,undef,undef,undef,undef) for (1..$max_threads);
+	    print "Закрываем контролёра.\n";
+	    "[$$] Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
+	    last;
 	}
     }
-    print "Закрываем контролёра.\n";
-    "[$$] Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
 }
 #-----------------------------------------------------------------------------
 # Обработчики.
 sub thread_worker { 
+    my $i=shift;
     print "Запуск обработчика.\n";
     "[$$]: Запуск обработчика.\n" >> io($logfile) if $DEBUG;
     my $self = threads->self(); 
@@ -196,7 +198,11 @@ sub thread_worker {
 	print "Ждем задание: ";
 	"[$$]: Ждем задание:\n" >> io($logfile) if $DEBUG;
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
-	last unless (defined $task);
+	unless (defined $task) {
+	    print "Закрывается обработчик: $i";
+	    "Закрывается обработчик: $i" >> io($logfile) if $DEBUG;
+	    last;
+	}
 	print "($task,$type,$offset,$length,$dataoffset)\n";
 	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
@@ -225,7 +231,7 @@ sub thread_worker {
     }
     # Закрываем канал отчетов.
 #    "[$$]: Закрываем канал отчетов.\n" >> io($logfile) if $DEBUG;
-#    $answerreq->enqueue(undef) for (1..$max_threads);
+#    $answerreq->enqueue(undef) 
     # Наверно этот вариант не подойдет и ориентировать стоит на колличество
     # обработчиков.
 #    threads->exit();
@@ -248,8 +254,8 @@ my $boss = threads->new(\&thread_boss);
 # Запускаем обработчики.
 print "Запускаем обработчики.\n";
 "[$$]: Запускаем обработчики.\n" >> io($logfile) if $DEBUG;
-for (1..$max_threads) {
-    push @threads, threads->new(\&thread_worker);
+for (my $i=1;$i<=$max_threads;$i++) {
+    push @threads, threads->new(\&thread_worker($i));
 }
 
 print "Ждем завершения контролёра.\n";
