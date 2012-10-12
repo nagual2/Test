@@ -72,32 +72,28 @@ if ($real_length_data<$length_data) {
 sub thread_boss { 
     my $self = threads->self(); 
     my $tid = $self->tid();
-#    print "Старт контролёра, tid=$tid\n";
     "[$$]: Старт контролёра, tid=$tid\n" >> io($logfile) if $DEBUG;
     my $task=0; 	# Номер задания.
     my $type;		# Тип задания чтение или запись.
     my $offset;		# Смещение от начала ($content).
     my $length;		# Длина записи.
     my $dataoffset;	# Смещение от начала записываемого файла.
-#    my $time_start;	# Время старта операции.
-#    my $time_stop;	# Время завершения операции.
     my $exit=0;		# Условие выхода ( 1 - выход). 
     my $all;		# Здесь будут результаты.
     $all->{'file_size'}=0;					# Можно подсчетать.
     $all->{'free_space'}=$all_space-$all->{'file_size'};	# Можно подсчитать.
+    $all->{'count'}=0;	# Колличество полученных отчетов.
     while (not $exit) {
         "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
 	next if $exit;
 	# Не ждем результаты.
-#	print "Не ждём результат\n";
 	"[$$]: Не ждём результат\n" >> io($logfile) if $DEBUG;
 	my ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)=$answerreq->dequeue_dontwait;
 	if (defined $old_task) {
-#	    print "Есть результат: ";
-#	    print "($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n";
 	    "[$$]: Есть результат:\n" >> io($logfile) if $DEBUG;
 	    "[$$]: ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
 	    # Обрабатываем результаты.
+	    $all->{'count'}++;
 	    $all->{$old_task}{'type'}=$old_type;
 	    $all->{$old_task}{'length'}=$old_length;
 	    $all->{$old_task}{'start_seconds'}=$start_seconds;
@@ -107,26 +103,24 @@ sub thread_boss {
 	    $all->{$old_task}{'time_diff'}=tv_interval ([$start_seconds,$start_microseconds],[$stop_seconds,$stop_microseconds]);
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'}/1024/0124;
 	    $all->{'file_size'}+=$old_length if $old_type; 	# Если запись добавляем.
+	    $all->{'file_size_Mb'}=$all->{'file_size'}/1024/1024;
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
+	    $all->{'free_space_pr'}=int($all->{'free_space'}*100/$all_space);
 	    "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
-	    print "Task: $old_task  speed (Mb/c):".$all->{$old_task}{'speed'}." file size (Mb):".($all->{'file_size'}/1024/1024)." free space (%):".(int($all->{'free_space'}*100/$all_space))."\n";
+	    print "Task: $old_task  speed (Mb/c):".$all->{$old_task}{'speed'}." file size (Mb):".$all->{'file_size_Mb'}." free space (%):".$all->{'free_space_pr'}."\n";
 	} else {
-#	    print "нет результата.\n";
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
 	    my $job=$answerreq->pending();
 	    if ($job==$max_threads) {
-#		print "Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n";
 		"[$$]: Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n" >> io($logfile) if $DEBUG;
 		usleep (10);
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
-	    } #else { 		# Ставим задания.	    }
+	    }
 	}
-#	    print "Ставим задания.\n";
 	    "[$$]: Ставим задания.\n" >> io($logfile) if $DEBUG;
 	    # Ставим задания.
 	    $type=int rand 2; 					# 0 - чтение, 1 - запись.
 	    unless ($type){
-#		print "Выпало чтение.\n";
 		"[$$]: Выпало чтение.\n" >> io($logfile) if $DEBUG;
 		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
 		$offset=int rand $all->{'file_size'};
@@ -134,7 +128,6 @@ sub thread_boss {
 		# Чтение (не может быть за пределами файла.)				
 		$dataoffset=0;					# 0 так как чтение.
 	    }else{
-#	    	print "Выпала запись.\n";
 	    	"[$$]: Выпала запись.\n" >> io($logfile) if $DEBUG;
 		$offset=int rand $real_length_data; 		# 0 - $real_length_data
 		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)	    
@@ -144,7 +137,6 @@ sub thread_boss {
 	        # 2) Диск забит полностью и пишем в середину.
 		unless ($all->{'free_space'}) {
 		    # Свободного мета нет - пишем в середину.
-#		    print "Свободного мета нет - пишем в середину.\n";
 		    "[$$]: Свободного мета нет - пишем в середину.\n" >> io($logfile) if $DEBUG;
 	    	    $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
 	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
@@ -152,38 +144,28 @@ sub thread_boss {
 	        }else{
 	            # Свободное мето есть.
 	            "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
-#	            print "Свободное мето есть.\n";
 	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
 	            # $dataoffset < $all->{'file_size'}+$all->{'free_space'} 
 	            # $dataoffset+$length < $all->{'free_space'}
 		    $dataoffset=int rand($all->{'file_size'});
 		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-#		    print "\$dataoffset=$dataoffset, $length=$length\n";
 		    "[$$] \$dataoffset=$dataoffset, \$length=$length\n" >> io($logfile) if $DEBUG;
 		    		    
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
-#	print "Сформировано задание: ";
-#	print "($task,$type,$offset,$length,$dataoffset)\n";
 	"[$$]: Сформировано задание:\n" >> io($logfile) if $DEBUG;
 	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
 	# Закрываем обработчиков.
-	if (($task>=$max_task)||($exit)) {
+	if (($all->{'count'}>=$max_task)||($exit)) {
 	    $exit=1;
-#	    print "Закрываем обработчиков.\n";
 	    "[$$]: Закрываем обработчиков.\n" >> io($logfile) if $DEBUG;
 	    $taskreq->enqueue(undef,undef,undef,undef,undef) for (1..$max_threads);
-#	    usleep(1000);
-#	    $taskreq=undef;
-#	    $answerreq=undef;
-#	    print "Закрываем контролёра.\n";
 	    "[$$] Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
 	    "[$$] Нужно организовать вывод результатов.\n" >> io($logfile) if $DEBUG;
 	    "[$$]:\n".Dumper($all) >> io($logfile) if $DEBUG;
-#	    last;
 	}
     }
 }
@@ -193,21 +175,15 @@ sub thread_worker {
     my $i=shift;
     my $self = threads->self(); 
     my $tid = $self->tid();
-#    print "Запуск обработчика, tid=$tid i=$i\n";
     "[$$]: Запуск обработчика, tid=$tid i=$i\n" >> io($logfile) if $DEBUG;
     my $exit=0;		# Условие выхода ( 1 - выход). 
     while (not $exit) {
-#	print "[$$] $job ".Dumper($job);
-#	"[$$] $job ".Dumper($job) >> io($logfile) if $DEBUG;
 	# Ждем задание.
-#	print "Ждем задание:\n";
 	"[$$]: Ждем задание:\n" >> io($logfile) if $DEBUG;
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
 	if (defined $task) {
-#	    print "($task,$type,$offset,$length,$dataoffset)\n";
 	    "[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
-#	    usleep (100); # Для тестирования.
 	    if($type){
 #	    aio_read $fh,$offset,$length, $data,$dataoffset, $callback->($retval) # $dataoffset=0
 #	    aio_read $fh, 0, $length_data, $contents, 0, sub {
@@ -230,12 +206,7 @@ sub thread_worker {
 	    $answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
 	    "[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;	
 	} else {
-#	    print "Закрывается обработчик: $i\n";
 	    "[$$] Закрывается обработчик: $i\n" >> io($logfile) if $DEBUG;
-#	    threads->exit() if threads->can('exit'); # потоко дружелюбно
-#	    exit(status);
-#	    usleep(1000);
-#	    last;
 	    $exit=1;
     	}
     }
@@ -243,7 +214,6 @@ sub thread_worker {
 
 #-----------------------------------------------------------------------------
 # Создаём наш тестовый файл:
-#print "Создаём наш тестовый файл: $file\n";
 "[$$]: Создаём наш тестовый файл: $file\n" >> io($logfile) if $DEBUG;
 aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONBLOCK,0644,sub {
     $fh = shift or die "error while opening: $!";
@@ -251,12 +221,10 @@ aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONB
 };
 
 # Запускаем контрллер.
-#print "Запускаем контроллер.\n";
 "[$$]: Запускаем контроллер.\n" >> io($logfile) if $DEBUG;
 my $boss = threads->new(sub{\&thread_boss()});
 
 # Запускаем обработчики.
-#print "Запускаем обработчики.\n";
 "[$$]: Запускаем обработчики.\n" >> io($logfile) if $DEBUG;
 for (my $i=1;$i<=$max_threads;$i++) {
     push @threads, threads->new(sub{\&thread_worker($i)});
@@ -267,21 +235,17 @@ foreach my $thread (@threads) {
     $thread->join();
 }
 
-#print "Ждем завершения контролёра.\n";
 "[$$]: Ждем завершения контролёра.\n" >> io($logfile) if $DEBUG;
 $boss->join(); # Ждем завершения контролёра.
 
 
 # Закрываем наш файл
-#print "Закрываем и удаляем наш файл.\n";
 "[$$]: Закрываем и удаляем наш файл.\n" >> io($logfile) if $DEBUG;
 unlink $file;
 
 my @err=threads->list(threads::all);
-#print Dumper(@err);
 "[$$]:\n".Dumper(@err) >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
-#print "Обработка результатов.\n";
 "[$$]: Обработка результатов.\n" >> io($logfile) if $DEBUG;
 
 # Как то обрабатываем и сохраняем результаты.
@@ -289,32 +253,3 @@ my @err=threads->list(threads::all);
 #-----------------------------------------------------------------------------
 exit 0;
 #-----------------------------------------------------------------------------
-    # Закрываем канал отчетов.
-#    "[$$]: Закрываем канал отчетов.\n" >> io($logfile) if $DEBUG;
-#    $answerreq->enqueue(undef) 
-    # Наверно этот вариант не подойдет и ориентировать стоит на колличество
-    # обработчиков.
-#    threads->exit();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
