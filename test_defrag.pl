@@ -102,6 +102,7 @@ sub thread_boss {
 	    "[$$]: Есть результат:\n" >> io($logfile) if $DEBUG;
 	    "[$$]: ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
 	    # Обрабатываем результаты.
+	    $all->{$old_task}{'count'}=$all->{'count'};
 	    $all->{'count'}++;
 	    $all->{$old_task}{'type'}=$old_type;
 	    unless ($old_type) {
@@ -143,7 +144,7 @@ sub thread_boss {
 	    my $job=$taskreq->pending();	    
 	    if ($job>=$max_threads) {
 		"[$$]: Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n" >> io($logfile) if $DEBUG;
-		usleep (10);
+		usleep (1000);
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
 	    }
 	}
@@ -207,6 +208,7 @@ sub thread_boss {
 	    "[$$]:\n".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	}
     }
+    return $all;
 }
 #-----------------------------------------------------------------------------
 # Обработчики.
@@ -227,29 +229,29 @@ sub thread_worker {
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-		aio_open $file,IO::AIO::O_O_RDONLY,0, sub {
-		    my $fh = shift or die "error while opening: $!";
+#		aio_open $file,IO::AIO::O_RDONLY,0, sub {
+#		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
 #		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
 #		    	$_[0] == $length_data or die "short read: $!";
-    			close $fh;
+#    			close $fh;
 			"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
 #		    };
-		};
+#		};
 	    }else{
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
-		aio_open $file,IO::AIO::O_WRONLY|IO::AIO::O_NONBLOCK,0, sub {
-		    my $fh = shift or die "error while opening: $!";
+#		aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_NONBLOCK,0, sub {
+#		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
 #		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
 #			$_[0] > 0 or die "write error: $!";
-			close $fh;
+#			close $fh;
 			"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
 #		    };
-		};
+#		};
 	    }
 	    # Ждем завершения.
-	    IO::AIO::flush;
+#	    IO::AIO::flush;
 	    # Отправляем отчет.
 	    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
 	    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
@@ -263,16 +265,17 @@ sub thread_worker {
 }
 
 #-----------------------------------------------------------------------------
-# Создаём наш тестовый файл:
+# Создаём наш тестовый файл.
 "[$$]: Создаём наш тестовый файл: $file\n" >> io($logfile) if $DEBUG;
 aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONBLOCK,0644,sub {
     $fh = shift or die "error while opening: $!";
     close $fh;
 };
+IO::AIO::flush;
 
 # Запускаем контрллер.
 "[$$]: Запускаем контроллер.\n" >> io($logfile) if $DEBUG;
-my $boss = threads->new(sub{\&thread_boss()});
+my $boss = threads->new(sub{ return my $tmp=\&thread_boss()});
 
 # Запускаем обработчики.
 "[$$]: Запускаем обработчики.\n" >> io($logfile) if $DEBUG;
@@ -286,7 +289,7 @@ foreach my $thread (@threads) {
 }
 
 "[$$]: Ждем завершения контролёра.\n" >> io($logfile) if $DEBUG;
-$boss->join(); # Ждем завершения контролёра.
+my $result=$boss->join(); # Ждем завершения контролёра.
 
 # Закрываем наш файл
 "[$$]: Закрываем и удаляем наш файл.\n" >> io($logfile) if $DEBUG;
@@ -296,7 +299,7 @@ my @err=threads->list(threads::all);
 "[$$]:\n".Dumper(@err) >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
 "[$$]: Обработка результатов.\n" >> io($logfile) if $DEBUG;
-
+"[$$]:\n".Dumper($result) >> io($logfile) if $DEBUG;
 # Как то обрабатываем и сохраняем результаты.
 
 #-----------------------------------------------------------------------------
