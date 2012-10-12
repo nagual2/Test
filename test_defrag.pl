@@ -69,6 +69,7 @@ aio_open $data, IO::AIO::O_RDONLY, 0, sub {
     };
 };
 # Ждем завершения.
+#IO::AIO::poll;
 IO::AIO::flush;
 if ($real_length_data<$length_data) {
     print "Мало памяти для тестирования.\n";
@@ -90,7 +91,8 @@ sub thread_boss {
     my $all;		# Здесь будут результаты.
     $all->{'file_size'}=0;					# Можно подсчетать.
     $all->{'free_space'}=$all_space-$all->{'file_size'};	# Можно подсчитать.
-    $all->{'count'}=0;	# Колличество полученных отчетов.
+    $all->{'count'}=0;		# Колличество полученных отчетов.
+    $all->{'count_start'}=0;	# Колличество поставленных заданий.
     $all->{'length_data_Mb'}=sprintf("%.2f",$real_length_data/1024/1024);
     while (not $exit) {
         "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
@@ -102,6 +104,7 @@ sub thread_boss {
 	    "[$$]: Есть результат:\n" >> io($logfile) if $DEBUG;
 	    "[$$]: ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
 	    # Обрабатываем результаты.
+	    $all->{'count_start'}--;
 	    $all->{$old_task}{'count'}=$all->{'count'};
 	    $all->{'count'}++;
 	    $all->{$old_task}{'type'}=$old_type;
@@ -141,8 +144,8 @@ sub thread_boss {
 			" % free space: ".$all->{'free_space_Mb'}."Mb \n" >> io($logfile) if $DEBUG;
 	} else {
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
-	    my $job=$taskreq->pending();	    
-	    if ($job>=$max_threads) {
+#	    my $job=$taskreq->pending();	    
+	    if ($all->{'count_start'}>=$max_threads) {
 		"[$$]: Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n" >> io($logfile) if $DEBUG;
 		usleep (1000);
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
@@ -164,7 +167,7 @@ sub thread_boss {
 		$length=$all->{'file_size'}-$offset if ($length >$all->{'file_size'}-$offset);
 		"[$$]: Длина чтения после проверок: $length\n" >> io($logfile) if $DEBUG;				
 		$dataoffset=0;					# 0 так как чтение.
-	    }else{
+	    } else {
 	    	"[$$]: Выпала запись.\n" >> io($logfile) if $DEBUG;
 		$offset=int rand $real_length_data; 		# 0 - $real_length_data
 		# Длина записи неможет быть больше блока данных.
@@ -180,7 +183,7 @@ sub thread_boss {
 	    	    $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
 	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
 	    	    $length=$all->{'file_size'}-$dataoffset if ($length > $all->{'file_size'}-$dataoffset);
-	        }else{
+	        } else {
 	            # Свободное мето есть.
 	            "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
@@ -189,8 +192,7 @@ sub thread_boss {
 		    $dataoffset=int rand($all->{'file_size'});
 		    "[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
 		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
-		    		    
+		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;		    		    
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
@@ -198,6 +200,7 @@ sub thread_boss {
 	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
+	$all->{'count_start'}++;
 	# Закрываем обработчиков.
 	if (($all->{'count'}>=$max_task)||($exit)) {
 	    $exit=1;
@@ -229,34 +232,33 @@ sub thread_worker {
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-#		aio_open $file,IO::AIO::O_RDONLY,0, sub {
-#		    my $fh = shift or die "error while opening: $!";
+		aio_open $file,IO::AIO::O_RDONLY,0, sub {
+		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
-#		    	$_[0] == $length_data or die "short read: $!";
-#    			close $fh;
+		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
+		    	$_[0] == $length_data or die "short read: $!";
+    			close $fh;
 			"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
-#		    };
-#		};
-	    }else{
+		    };
+		};
+	    } else {
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
-#		aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_NONBLOCK,0, sub {
-#		    my $fh = shift or die "error while opening: $!";
+		aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_NONBLOCK,0, sub {
+		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
-#			$_[0] > 0 or die "write error: $!";
-#			close $fh;
+		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
+			$_[0] > 0 or die "write error: $!";			
 			"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
-#		    };
-#		};
+		    };
+		    close $fh;
+		    # Отправляем отчет.
+		    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
+		    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
+		    $answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
+		    "[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;			    
+		};
 	    }
-	    # Ждем завершения.
-#	    IO::AIO::flush;
-	    # Отправляем отчет.
-	    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
-	    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
-	    $answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
-	    "[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;	
+	    # Не ждем завершения. Контролёр не поставит задания пока получит отчет.
 	} else {
 	    "[$$]: Закрывается обработчик: $i\n" >> io($logfile) if $DEBUG;
 	    $exit=1;
@@ -271,6 +273,7 @@ aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONB
     $fh = shift or die "error while opening: $!";
     close $fh;
 };
+#IO::AIO::poll;
 IO::AIO::flush;
 
 # Запускаем контрллер.
@@ -305,3 +308,12 @@ my @err=threads->list(threads::all);
 #-----------------------------------------------------------------------------
 exit 0;
 #-----------------------------------------------------------------------------
+#	    while (my $nreqs=IO::AIO::flush){
+#		"[$$]:Ждем завершения операции: ".Dumper($nreqs) >> io($logfile) if $DEBUG;
+#	        usleep(100);
+#	    }
+#	    IO::AIO::poll_wait, IO::AIO::poll_cb while IO::AIO::nreqs;
+#	    while IO::AIO::nreqs;
+#	    while IO::AIO::poll_wait;
+#	    IO::AIO::poll;
+#	    IO::AIO::flush;
