@@ -125,7 +125,7 @@ sub thread_boss {
 			" Mb/c file size: ".$all->{'file_size_Mb'}.
 			" Mb free space :".$all->{'free_space_pr'}.
 			" % free space: ".$all->{'free_space_Mb'}."Mb \n";
-			"Task: ".$old_task.
+			"[$$]: Task: ".$old_task.
 			" type: ".$all->{$old_task}{'type_sim'}.
 			" length: ".$all->{$old_task}{'length_Mb'}.
 			" Mb speed : ".$all->{$old_task}{'speed_Mb'}.
@@ -157,7 +157,7 @@ sub thread_boss {
 		$offset=int rand $real_length_data; 		# 0 - $real_length_data
 		# Длина записи неможет быть больше блока данных.
 		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)
-		"[$$] Длина записи первичная: $length\n" >> io($logfile) if $DEBUG;
+		"[$$]: Длина записи первичная: $length\n" >> io($logfile) if $DEBUG;
 		# Запись.
 	        # Возможны два режима:
 		# 1) Диск еще не забит полностью и мы дописываем.
@@ -177,7 +177,7 @@ sub thread_boss {
 		    $dataoffset=int rand($all->{'file_size'});
 		    "[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
 		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-		    "[$$] Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
+		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
 		    		    
 		}
 	    }	
@@ -191,8 +191,8 @@ sub thread_boss {
 	    $exit=1;
 	    "[$$]: Закрываем обработчиков.\n" >> io($logfile) if $DEBUG;
 	    $taskreq->enqueue(undef,undef,undef,undef,undef) for (1..$max_threads);
-	    "[$$] Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
-	    "[$$] Нужно организовать вывод результатов.\n" >> io($logfile) if $DEBUG;
+	    "[$$]: Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
+	    "[$$]: Нужно организовать вывод результатов.\n" >> io($logfile) if $DEBUG;
 	    "[$$]:\n".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	}
     }
@@ -235,7 +235,7 @@ sub thread_worker {
 	    $answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
 	    "[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;	
 	} else {
-	    "[$$] Закрывается обработчик: $i\n" >> io($logfile) if $DEBUG;
+	    "[$$]: Закрывается обработчик: $i\n" >> io($logfile) if $DEBUG;
 	    $exit=1;
     	}
     }
@@ -266,7 +266,6 @@ foreach my $thread (@threads) {
 
 "[$$]: Ждем завершения контролёра.\n" >> io($logfile) if $DEBUG;
 $boss->join(); # Ждем завершения контролёра.
-
 
 # Закрываем наш файл
 "[$$]: Закрываем и удаляем наш файл.\n" >> io($logfile) if $DEBUG;
