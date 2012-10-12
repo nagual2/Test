@@ -101,26 +101,27 @@ sub thread_boss {
 		$all->{$old_task}{'type_sim'}="rw";
 	    }
 	    $all->{$old_task}{'length'}=$old_length;
-	    $all->{$old_task}{'length_mb'}=sprintf("%.2f",$old_length/1024/0124);
+	    $all->{$old_task}{'length_Mb'}=sprintf("%.2f",$old_length/1024/0124);
 	    $all->{$old_task}{'start_seconds'}=$start_seconds;
 	    $all->{$old_task}{'start_microseconds'}=$start_microseconds;
 	    $all->{$old_task}{'stop_seconds'}=$stop_seconds;
 	    $all->{$old_task}{'stop_microseconds'}=$stop_microseconds;
 	    $all->{$old_task}{'time_diff'}=tv_interval ([$start_seconds,$start_microseconds],[$stop_seconds,$stop_microseconds]);
-	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'}/1024/0124;
+	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
+	    $all->{$old_task}{'speed_Mb'}=sprintf("%.2f",$all->{$old_task}{'speed'}/1024/0124);
 	    $all->{'file_size'}+=$old_length if $old_type; 	# Если запись добавляем.
 	    $all->{'file_size_Mb'}=sprintf("%.2f",$all->{'file_size'}/1024/1024);
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
-	    $all->{'free_space_mb'}=sprintf("%.2f",$all->{'free_space'}/1024/1024);
+	    $all->{'free_space_Mb'}=sprintf("%.2f",$all->{'free_space'}/1024/1024);
 	    $all->{'free_space_pr'}=sprintf("%.2f",$all->{'free_space'}*100/$all_space);
 	    "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
 	    print	"Task: ".$old_task.
 			" type: ".$all->{$old_task}{'type_sim'}.
-			" length: ".$all->{$old_task}{'length_mb'}.
-			"Mb speed (Mb/c): ".$all->{$old_task}{'speed'}.
-			" file size: ".$all->{'file_size_Mb'}.
+			" length: ".$all->{$old_task}{'length_Mb'}.
+			"Mb speed : ".$all->{$old_task}{'speed_Mb'}.
+			"Mb/c file size: ".$all->{'file_size_Mb'}.
 			"Mb free space :".$all->{'free_space_pr'}.
-			"% free space: ".$all->{'free_space_mb'}."Mb \n";
+			"% free space: ".$all->{'free_space_Mb'}."Mb \n";
 	} else {
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
 	    my $job=$answerreq->pending();
