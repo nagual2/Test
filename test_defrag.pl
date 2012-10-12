@@ -37,14 +37,14 @@ my $file="/tmp/fs_test01";	# Имя файла для тестирования.
 my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
 my $contents=""; 	# Переменная в которой будет храниться сгенеренные данные.
-my $length_data=1024*1024; 	# Длина данных
-my $real_length_data;		# То же.
+my $length_data=1024*1024*1024; 	# Длина данных
+my $real_length_data;			# То же.
 my $taskreq=Thread::Queue::Any->new;
 my $answerreq=Thread::Queue::Any->new;
 my @threads;
 
-my $max_threads=2; 	# Колличество обработчиков.
-my $max_task=10;	# Максимальное колличество заданий.
+my $max_threads=10; 	# Колличество обработчиков.
+my $max_task=100;	# Максимальное колличество заданий.
 my $all_space=1024*1024*1024*20; # Размер свободного места под тесты (должно измеряться).
 my $logfile="./test_defrag.log";
 my $DEBUG=1;
@@ -95,7 +95,13 @@ sub thread_boss {
 	    # Обрабатываем результаты.
 	    $all->{'count'}++;
 	    $all->{$old_task}{'type'}=$old_type;
+	    unless ($old_type) {
+		$all->{$old_task}{'type_sim'}="rd";
+	    } else {
+		$all->{$old_task}{'type_sim'}="rw";
+	    }
 	    $all->{$old_task}{'length'}=$old_length;
+	    $all->{$old_task}{'length_mb'}=sprintf("%.2f",$old_length/1024/0124);
 	    $all->{$old_task}{'start_seconds'}=$start_seconds;
 	    $all->{$old_task}{'start_microseconds'}=$start_microseconds;
 	    $all->{$old_task}{'stop_seconds'}=$stop_seconds;
@@ -103,11 +109,18 @@ sub thread_boss {
 	    $all->{$old_task}{'time_diff'}=tv_interval ([$start_seconds,$start_microseconds],[$stop_seconds,$stop_microseconds]);
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'}/1024/0124;
 	    $all->{'file_size'}+=$old_length if $old_type; 	# Если запись добавляем.
-	    $all->{'file_size_Mb'}=$all->{'file_size'}/1024/1024;
+	    $all->{'file_size_Mb'}=sprintf("%.2f",$all->{'file_size'}/1024/1024);
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
-	    $all->{'free_space_pr'}=int($all->{'free_space'}*100/$all_space);
+	    $all->{'free_space_mb'}=sprintf("%.2f",$all->{'free_space'}/1024/1024);
+	    $all->{'free_space_pr'}=sprintf("%.2f",$all->{'free_space'}*100/$all_space);
 	    "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
-	    print "Task: $old_task  speed (Mb/c):".$all->{$old_task}{'speed'}." file size (Mb):".$all->{'file_size_Mb'}." free space (%):".$all->{'free_space_pr'}."\n";
+	    print	"Task: ".$old_task.
+			" type: ".$all->{$old_task}{'type_sim'}.
+			" length: ".$all->{$old_task}{'length_mb'}.
+			"Mb speed (Mb/c): ".$all->{$old_task}{'speed'}.
+			" file size: ".$all->{'file_size_Mb'}.
+			"Mb free space :".$all->{'free_space_pr'}.
+			"% free space: ".$all->{'free_space_mb'}."Mb \n";
 	} else {
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
 	    my $job=$answerreq->pending();
@@ -130,7 +143,9 @@ sub thread_boss {
 	    }else{
 	    	"[$$]: Выпала запись.\n" >> io($logfile) if $DEBUG;
 		$offset=int rand $real_length_data; 		# 0 - $real_length_data
-		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)	    
+		# Длина записи неможет быть больше блока данных.
+		$length=int rand ($real_length_data-$offset); 	# 0 - ($real_length_data-$offset)
+		"[$$] Длина записи первичная: $length\n" >> io($logfile) if $DEBUG;
 		# Запись.
 	        # Возможны два режима:
 		# 1) Диск еще не забит полностью и мы дописываем.
@@ -148,8 +163,9 @@ sub thread_boss {
 	            # $dataoffset < $all->{'file_size'}+$all->{'free_space'} 
 	            # $dataoffset+$length < $all->{'free_space'}
 		    $dataoffset=int rand($all->{'file_size'});
+		    "[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
 		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-		    "[$$] \$dataoffset=$dataoffset, \$length=$length\n" >> io($logfile) if $DEBUG;
+		    "[$$] Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
 		    		    
 		}
 	    }	
@@ -182,6 +198,7 @@ sub thread_worker {
 	"[$$]: Ждем задание:\n" >> io($logfile) if $DEBUG;
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
 	if (defined $task) {
+#	    usleep(100);
 	    "[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    if($type){
