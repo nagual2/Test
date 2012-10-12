@@ -49,6 +49,8 @@ my $all_space=1024*1024*1024*20; # Размер свободного места 
 my $logfile="./test_defrag.log";
 my $DEBUG=1;
 "[$$]: test_defrag.pl Start\n" > io($logfile) if $DEBUG;
+print "Создадим буфер с данными.\n";
+"Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
 aio_open $data, IO::AIO::O_RDONLY, 0, sub {
     my $fh = shift or die "error while opening: $!";
@@ -83,8 +85,9 @@ sub thread_boss {
     $all->{'file_size'}=0;					# Можно подсчетать.
     $all->{'free_space'}=$all_space-$all->{'file_size'};	# Можно подсчитать.
     $all->{'count'}=0;	# Колличество полученных отчетов.
+    $all->{'length_data_Mb'}=sprintf("%.2f",$real_length_data/1024/1024);
     while (not $exit) {
-        "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
+        "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	next if $exit;
 	# Не ждем результаты.
 	"[$$]: Не ждём результат\n" >> io($logfile) if $DEBUG;
@@ -101,7 +104,7 @@ sub thread_boss {
 		$all->{$old_task}{'type_sim'}="rw";
 	    }
 	    $all->{$old_task}{'length'}=$old_length;
-	    $all->{$old_task}{'length_Mb'}=sprintf("%.2f",$old_length/1024/0124);
+	    $all->{$old_task}{'length_Mb'}=sprintf("%.2f",$old_length/1024/1024);
 	    $all->{$old_task}{'start_seconds'}=$start_seconds;
 	    $all->{$old_task}{'start_microseconds'}=$start_microseconds;
 	    $all->{$old_task}{'stop_seconds'}=$stop_seconds;
@@ -114,14 +117,21 @@ sub thread_boss {
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
 	    $all->{'free_space_Mb'}=sprintf("%.2f",$all->{'free_space'}/1024/1024);
 	    $all->{'free_space_pr'}=sprintf("%.2f",$all->{'free_space'}*100/$all_space);
-	    "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
+	    "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	    print	"Task: ".$old_task.
 			" type: ".$all->{$old_task}{'type_sim'}.
 			" length: ".$all->{$old_task}{'length_Mb'}.
-			"Mb speed : ".$all->{$old_task}{'speed_Mb'}.
-			"Mb/c file size: ".$all->{'file_size_Mb'}.
-			"Mb free space :".$all->{'free_space_pr'}.
-			"% free space: ".$all->{'free_space_Mb'}."Mb \n";
+			" Mb speed : ".$all->{$old_task}{'speed_Mb'}.
+			" Mb/c file size: ".$all->{'file_size_Mb'}.
+			" Mb free space :".$all->{'free_space_pr'}.
+			" % free space: ".$all->{'free_space_Mb'}."Mb \n";
+			"Task: ".$old_task.
+			" type: ".$all->{$old_task}{'type_sim'}.
+			" length: ".$all->{$old_task}{'length_Mb'}.
+			" Mb speed : ".$all->{$old_task}{'speed_Mb'}.
+			" Mb/c file size: ".$all->{'file_size_Mb'}.
+			" Mb free space :".$all->{'free_space_pr'}.
+			" % free space: ".$all->{'free_space_Mb'}."Mb \n" >> io($logfile) if $DEBUG;
 	} else {
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
 	    my $job=$answerreq->pending();
@@ -138,6 +148,7 @@ sub thread_boss {
 		"[$$]: Выпало чтение.\n" >> io($logfile) if $DEBUG;
 		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
 		$offset=int rand $all->{'file_size'};
+		# Наверно не стоит читать объём больший чем буфер ...
 		$length=int rand ($all->{'file_size'}-$offset);
 		# Чтение (не может быть за пределами файла.)				
 		$dataoffset=0;					# 0 так как чтение.
@@ -159,7 +170,7 @@ sub thread_boss {
 	    	    $length=$all->{'file_size'}-$dataoffset if ($length > $all->{'file_size'}-$dataoffset);
 	        }else{
 	            # Свободное мето есть.
-	            "[$$]".Dumper($all) >> io($logfile) if $DEBUG;
+	            "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
 	            # $dataoffset < $all->{'file_size'}+$all->{'free_space'} 
 	            # $dataoffset+$length < $all->{'free_space'}
@@ -182,7 +193,7 @@ sub thread_boss {
 	    $taskreq->enqueue(undef,undef,undef,undef,undef) for (1..$max_threads);
 	    "[$$] Закрываем контролёра.\n" >> io($logfile) if $DEBUG;
 	    "[$$] Нужно организовать вывод результатов.\n" >> io($logfile) if $DEBUG;
-	    "[$$]:\n".Dumper($all) >> io($logfile) if $DEBUG;
+	    "[$$]:\n".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	}
     }
 }
