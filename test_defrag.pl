@@ -24,14 +24,16 @@
 # Где --- это чтение, а === это запись.
 #
 use forks;
-use forks::shared;
+#use forks::shared;
 use strict;
 use warnings;
 use v5.14;
+#use utf8;
+#use open (:utf8 :std);
 use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval usleep);
 use threads;
-use threads::shared;
+#use threads::shared;
 use Thread::Queue::Any;
 use IO::AIO;
 use IO::All;
@@ -232,33 +234,33 @@ sub thread_worker {
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-		aio_open $file,IO::AIO::O_RDONLY,0, sub {
-		    my $fh = shift or die "error while opening: $!";
+#		aio_open $file,IO::AIO::O_RDONLY,0, sub {
+#		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
-		    	$_[0] == $length_data or die "short read: $!";
-    			close $fh;
+#		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
+#		    	$_[0] == $length_data or die "short read: $!";
+#    			close $fh;
 			"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
-		    };
-		};
+#		    };
+#		};
 	    } else {
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
-		aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_NONBLOCK,0, sub {
-		    my $fh = shift or die "error while opening: $!";
+#		aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_NONBLOCK,0, sub {
+#		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
-			$_[0] > 0 or die "write error: $!";			
+#		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
+#			$_[0] > 0 or die "write error: $!";			
 			"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
-		    };
-		    close $fh;
-		    # Отправляем отчет.
-		    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
-		    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
-		    $answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
-		    "[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;			    
-		};
+#		    };
+#		    close $fh;
+#		};
 	    }
 	    # Не ждем завершения. Контролёр не поставит задания пока получит отчет.
+	    # Отправляем отчет.
+	    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
+	    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
+	    $answerreq->enqueue($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds);
+	    "[$$]: ($task,$type,$length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;	    
 	} else {
 	    "[$$]: Закрывается обработчик: $i\n" >> io($logfile) if $DEBUG;
 	    $exit=1;
