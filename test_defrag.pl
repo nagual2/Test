@@ -38,14 +38,16 @@ my $file="/mnt/fs/test01";	# Имя файла для тестирования.
 my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
 my $contents=""; 	# Переменная в которой будет храниться сгенеренные данные.
-my $max_threads=10; 	# Колличество обработчиков.
+my $max_threads=1; 	# Колличество обработчиков.
 my $max_task=1000;	# Максимальное колличество заданий.
 my $free_mem=1024*1024*1024*2; # Всего 2Гб оперативной памяти (своп не считаем).
 my $length_data=1024*1024*1024; 	# Длина данных для записи.
 my $real_length_data;			# То же.
+my $w_syze=1024*1024*50;	# Объём памяти зарезирвированный под каждый обработчик.
+my $rezerv=($max_threads+2)*$w_syze;
 # Каждый обработчик должен выделить объём памяти для чтения.
 # Из расчета 2Гб всего - 1Гб для записи=1Гб
-my $length_worker=int(($free_mem-$length_data)/$max_threads);
+my $length_worker=int(($free_mem-$length_data-$rezerv)/$max_threads);
 my $taskreq=Thread::Queue::Any->new;
 my $answerreq=Thread::Queue::Any->new;
 my @threads;
@@ -55,18 +57,19 @@ my $DEBUG=1;
 "[$$]: test_defrag.pl Start\n" > io($logfile) if $DEBUG;
 print "Создадим буфер с данными.\n";
 "[$$]: Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
-"[$$]: " >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
 sysopen $fh, $data,O_RDONLY or die "Нельзя открыть $data: $!";
 sysread $fh,$contents,$length_data,0;
 close $fh;
 $real_length_data=length($contents);
-print "Буфер создан, размер: ".$real_length_data."\n";
+print "Буфер записи создан, размер: ".$real_length_data."\n";
 if ($real_length_data<$length_data) {
     print "Мало памяти для тестирования.\n";
     "[$$]: Мало памяти для тестирования.\n" >> io($logfile) if $DEBUG;
     exit 0;
 }
+print "Длина буфера чтения: $length_worker\n";
+"[$$]: Длина буфера чтения: $length_worker\n" >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
 # Контроллёр.
 sub thread_boss { 
@@ -137,7 +140,7 @@ sub thread_boss {
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
 	    if ($all->{'count_start'}>=$max_threads) {
 		"[$$]: Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n" >> io($logfile) if $DEBUG;
-		usleep (1000);
+		usleep (3000);
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
 	    }
 	}
@@ -172,7 +175,10 @@ sub thread_boss {
 		    "[$$]: Свободного мета нет - пишем в середину.\n" >> io($logfile) if $DEBUG;
 	    	    $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
 	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
-	    	    $length=$all->{'file_size'}-$dataoffset if ($length > $all->{'file_size'}-$dataoffset);
+	    	    # Файл не должен выйти за пределы свободного места на диске.
+		    $length=$all->{'file_size'}+$all->{'free_space'}-$dataoffset if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
+		    # Чтение данных не должно выйти за пределы блока памяти.
+	    	    $length=$real_length_data-$offset if ($length+$offset > $real_length_data);
 	        } else {
 	            # Свободное мето есть.
 	            "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
@@ -186,15 +192,15 @@ sub thread_boss {
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
-	"[$$]: *Сформировано задание:\n" >> io($logfile) if $DEBUG;
-	"[$$]: *($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Задание: $task\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Тип: $type\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Длина записываемого блока: $length\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Актуальный размер файлв в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
-	"[$$]: *Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Сформировано задание:\n" >> io($logfile) if $DEBUG;
+	"[$$]: * ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Задание: $task\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Тип: $type\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Длина записываемого блока: $length\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Актуальный размер файла в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
 	$all->{'count_start'}++;
@@ -254,7 +260,6 @@ sub thread_worker {
 		close $fh;
 		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
 	    }
-	    # Не ждем завершения. Контролёр не поставит задания пока получит отчет.
 	    # Отправляем отчет.
 	    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
 	    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
