@@ -146,10 +146,11 @@ sub thread_boss {
 	}
 	    "[$$]: Ставим задания.\n" >> io($logfile) if $DEBUG;
 	    # Ставим задания.
-	    $type=int rand 2; 					# 0 - чтение, 1 - запись.
+	    $type=int rand 2; 					# 0 - чтение, 1 - запись, 2 - удаление.
 	    unless ($type){
 		"[$$]: Выпало чтение.\n" >> io($logfile) if $DEBUG;
 		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
+#		next;
 		$offset=int rand $all->{'file_size'};
 		# Наверно не стоит читать объём больший чем буфер ...
 		# $length=int rand ($all->{'file_size'}-$offset);
@@ -160,7 +161,7 @@ sub thread_boss {
 		$length=$all->{'file_size'}-$offset if ($length >$all->{'file_size'}-$offset);
 		"[$$]: Длина чтения после проверок: $length\n" >> io($logfile) if $DEBUG;				
 		$dataoffset=0;					# 0 так как чтение.
-	    } else {
+	    } elsif($type==1) {
 	    	"[$$]: Выпала запись.\n" >> io($logfile) if $DEBUG;
 		$offset=int rand $real_length_data; 		# 0 - $real_length_data
 		# Длина записи неможет быть больше блока данных.
@@ -170,26 +171,18 @@ sub thread_boss {
 	        # Возможны два режима:
 		# 1) Диск еще не забит полностью и мы дописываем.
 	        # 2) Диск забит полностью и пишем в середину.
-		unless ($all->{'free_space'}) {
-		    # Свободного мета нет - пишем в середину.
-		    "[$$]: Свободного мета нет - пишем в середину.\n" >> io($logfile) if $DEBUG;
-	    	    $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
-	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
-	    	    # Файл не должен выйти за пределы свободного места на диске.
-		    $length=$all->{'file_size'}+$all->{'free_space'}-$dataoffset if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-		    # Чтение данных не должно выйти за пределы блока памяти.
-	    	    $length=$real_length_data-$offset if ($length+$offset > $real_length_data);
-	        } else {
-	            # Свободное мето есть.
-	            "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
-	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
-	            # $dataoffset < $all->{'file_size'}+$all->{'free_space'} 
-	            # $dataoffset+$length < $all->{'free_space'}
-		    $dataoffset=int rand($all->{'file_size'});
-		    "[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
-		    $length=$all->{'file_size'}+$all->{'free_space'} if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;		    		    
-		}
+	        $dataoffset=int rand ($all->{'file_size'}); 	# 0 - file_size
+	    	"[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
+	    	# Файл не должен выйти за пределы свободного места на диске.
+		my $length0=$length;
+		$length0=$all->{'file_size'}+$all->{'free_space'}-$dataoffset if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
+		# Чтение данных не должно выйти за пределы блока памяти.
+	    	$length=$real_length_data-$offset if ($length+$offset > $real_length_data);
+	    	$length=$length0 if ($length0 < $length);
+	    	"[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
+	    } else {
+		# Удаление.
+	    	"[$$]: Выпало удаление (нереализованно).\n" >> io($logfile) if $DEBUG;
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
 	"[$$]: * Сформировано задание:\n" >> io($logfile) if $DEBUG;
@@ -235,7 +228,7 @@ sub thread_worker {
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-		sysopen $fh, $file,O_RDONLY or die "Нельзя открыть $file: $!";
+		sysopen $fh, $file,O_RDONLY|O_NONBLOCK or die "Нельзя открыть $file: $!";
 		binmode $fh;
 		my $bytes=sysread $fh,$data,$length_data,$offset;
 		"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
@@ -251,6 +244,7 @@ sub thread_worker {
 		binmode $fh;
 		"[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
 #		seek $fh,$dataoffset,SEEK_SET or die "Couldn't seek filehandle: $!";
+#		Offset outside string at ./test_defrag.pl line 247.
 		my $bytes=syswrite $fh,substr($contents, $offset, $length),$length,$dataoffset;
 		"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
 		if ($bytes<$length) {
@@ -310,3 +304,20 @@ my @err=threads->list(threads::all);
 #-----------------------------------------------------------------------------
 exit 0;
 #-----------------------------------------------------------------------------
+#		unless ($all->{'free_space'}) {
+		    # Свободного мета нет - пишем в середину.
+#		    "[$$]: Свободного мета нет - пишем в середину.\n" >> io($logfile) if $DEBUG;
+#	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
+#		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
+#	        } else {
+	            # Свободное мето есть.
+#	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
+#		    $dataoffset=int rand($all->{'file_size'});		# 0 - file_size
+#		    "[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
+		    # Файл не должен выйти за пределы свободного места на диске.
+#		    my $length0=$all->{'file_size'}+$all->{'free_space'}-$dataoffset if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
+		    # Чтение данных не должно выйти за пределы блока памяти.
+#	    	    $length=$real_length_data-$offset if ($length+$offset > $real_length_data);
+#	    	    $length=$length0 if ($length0 < $length);	    	    
+#		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
+#		}
