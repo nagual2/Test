@@ -24,35 +24,32 @@
 # Где --- это чтение, а === это запись.
 #
 use forks;
-#use forks::shared;
 use strict;
 use warnings;
 use v5.14;
-#use utf8;
-#use open (:utf8 :std);
 use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval usleep);
 use threads;
-#use threads::shared;
 use Thread::Queue::Any;
-use IO::AIO;
+use POSIX 'SEEK_SET';
+use Fcntl 'O_RDONLY','O_RDWR','O_CREAT','O_TRUNC','O_NONBLOCK';
 use IO::All;
-my $file="/tmp/fs_test01";	# Имя файла для тестирования.
+my $file="/mnt/fs/test01";	# Имя файла для тестирования.
 my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
 my $contents=""; 	# Переменная в которой будет храниться сгенеренные данные.
-my $max_threads=1; 	# Колличество обработчиков.
-my $max_task=100;	# Максимальное колличество заданий.
+my $max_threads=10; 	# Колличество обработчиков.
+my $max_task=1000;	# Максимальное колличество заданий.
 my $free_mem=1024*1024*1024*2; # Всего 2Гб оперативной памяти (своп не считаем).
-my $length_data=1024*1024; 	# Длина данных для записи.
+my $length_data=1024*1024*1024; 	# Длина данных для записи.
+my $real_length_data;			# То же.
 # Каждый обработчик должен выделить объём памяти для чтения.
 # Из расчета 2Гб всего - 1Гб для записи=1Гб
 my $length_worker=int(($free_mem-$length_data)/$max_threads);
-my $real_length_data;			# То же.
 my $taskreq=Thread::Queue::Any->new;
 my $answerreq=Thread::Queue::Any->new;
 my @threads;
-my $all_space=1024*1024*1024*20; # Размер свободного места под тесты (должно измеряться).
+my $all_space=1024*1024*1024*6; # Размер свободного места на диске под тесты (должно измеряться).
 my $logfile="./test_defrag.log";
 my $DEBUG=1;
 "[$$]: test_defrag.pl Start\n" > io($logfile) if $DEBUG;
@@ -60,19 +57,11 @@ print "Создадим буфер с данными.\n";
 "[$$]: Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
 "[$$]: " >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
-aio_open $data, IO::AIO::O_RDONLY, 0, sub {
-    my $fh = shift or die "error while opening: $!";
-    aio_read $fh, 0, $length_data, $contents, 0, sub {
-	$_[0] == $length_data or die "short read: $!";
- 	close $fh;
- 	$real_length_data=length($contents);
-	print "Буфер создан, размер: ".$real_length_data."\n";
-	"[$$]: Буфер создан, размер: ".$real_length_data."\n" >> io($logfile) if $DEBUG;
-    };
-};
-# Ждем завершения.
-#IO::AIO::poll;
-IO::AIO::flush;
+sysopen $fh, $data,O_RDONLY or die "Нельзя открыть $data: $!";
+sysread $fh,$contents,$length_data,0;
+close $fh;
+$real_length_data=length($contents);
+print "Буфер создан, размер: ".$real_length_data."\n";
 if ($real_length_data<$length_data) {
     print "Мало памяти для тестирования.\n";
     "[$$]: Мало памяти для тестирования.\n" >> io($logfile) if $DEBUG;
@@ -200,6 +189,13 @@ sub thread_boss {
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
 	"[$$]: Сформировано задание:\n" >> io($logfile) if $DEBUG;
 	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
+	"[$$]: Задание: $task\n" >> io($logfile) if $DEBUG;
+	"[$$]: Тип: $type\n" >> io($logfile) if $DEBUG;
+	"[$$]: Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
+	"[$$]: Длина записываемого блока: $length\n" >> io($logfile) if $DEBUG;
+	"[$$]: Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
+	"[$$]: Актуальный размер файлв в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
 	$all->{'count_start'}++;
@@ -234,26 +230,37 @@ sub thread_worker {
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-#		aio_open $file,IO::AIO::O_RDONLY,0, sub {
-#		    my $fh = shift or die "error while opening: $!";
-		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
-#		    	$_[0] == $length_data or die "short read: $!";
-#    			close $fh;
-			"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
-#		    };
-#		};
+#		my $fd = POSIX::open( $file, &POSIX::O_RDONLY );
+		sysopen $fh, $file,O_RDONLY or die "Нельзя открыть $file: $!";
+		binmode $fh;
+#		my $off_t = POSIX::lseek($fd,$offset,&POSIX::SEEK_SET);
+		my $bytes=sysread $fh,$data,$length_data,$offset;
+		"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
+		if ($bytes<$length) {
+		    print "[$$]: Ошибка чтения: $bytes < $length\n";
+		    "[$$]: Ошибка чтения: $bytes < $length\n" >> io($logfile) if $DEBUG;
+		}
+#		POSIX::close( $fd );
+		close $fh;
+		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
 	    } else {
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
-#		aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_NONBLOCK,0, sub {
-#		    my $fh = shift or die "error while opening: $!";
-		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
-#			$_[0] > 0 or die "write error: $!";			
-			"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
-#		    };
-#		    close $fh;
-#		};
+#		$fd = POSIX::open($file, &POSIX::O_RDWR|&POSIX::O_NONBLOCK);
+		sysopen $fh, $file,O_RDWR|O_NONBLOCK,660 or die "Нельзя открыть $file: $!";
+		binmode $fh;
+		"[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
+#		my $off_t = POSIX::lseek($fd,$dataoffset,&POSIX::SEEK_SET);
+#		seek $fh,$dataoffset,SEEK_SET or die "Couldn't seek filehandle: $!";
+#		$bytes = POSIX::write($fd,substr($contents, $offset, $length),$length);
+		my $bytes=syswrite $fh,substr($contents, $offset, $length),$length,$dataoffset;
+		"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
+		if ($bytes<$length) {
+		    print "[$$]: Ошибка записи: $bytes < $length\n";
+		    "[$$]: Ошибка записи: $bytes < $length\n" >> io($logfile) if $DEBUG;
+		}
+#		POSIX::close($fd);
+		close $fh;
+		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
 	    }
 	    # Не ждем завершения. Контролёр не поставит задания пока получит отчет.
 	    # Отправляем отчет.
@@ -271,12 +278,8 @@ sub thread_worker {
 #-----------------------------------------------------------------------------
 # Создаём наш тестовый файл.
 "[$$]: Создаём наш тестовый файл: $file\n" >> io($logfile) if $DEBUG;
-aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONBLOCK,0644,sub {
-    $fh = shift or die "error while opening: $!";
-    close $fh;
-};
-#IO::AIO::poll;
-IO::AIO::flush;
+sysopen $fh, $file,O_RDONLY|O_RDWR|O_CREAT|O_TRUNC|O_NONBLOCK,660 or die "Нельзя открыть $file: $!";
+close $fh;
 
 # Запускаем контрллер.
 "[$$]: Запускаем контроллер.\n" >> io($logfile) if $DEBUG;
@@ -310,12 +313,3 @@ my @err=threads->list(threads::all);
 #-----------------------------------------------------------------------------
 exit 0;
 #-----------------------------------------------------------------------------
-#	    while (my $nreqs=IO::AIO::flush){
-#		"[$$]:Ждем завершения операции: ".Dumper($nreqs) >> io($logfile) if $DEBUG;
-#	        usleep(100);
-#	    }
-#	    IO::AIO::poll_wait, IO::AIO::poll_cb while IO::AIO::nreqs;
-#	    while IO::AIO::nreqs;
-#	    while IO::AIO::poll_wait;
-#	    IO::AIO::poll;
-#	    IO::AIO::flush;
