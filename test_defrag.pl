@@ -135,7 +135,6 @@ sub thread_boss {
 			" % free space: ".$all->{'free_space_Mb'}."Mb \n" >> io($logfile) if $DEBUG;
 	} else {
 	    "[$$]: нет результата.\n" >> io($logfile) if $DEBUG;
-#	    my $job=$taskreq->pending();	    
 	    if ($all->{'count_start'}>=$max_threads) {
 		"[$$]: Нет результатов и есть задания для всех обработчиков - пропускаем ход.\n" >> io($logfile) if $DEBUG;
 		usleep (1000);
@@ -187,15 +186,15 @@ sub thread_boss {
 		}
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
-	"[$$]: Сформировано задание:\n" >> io($logfile) if $DEBUG;
-	"[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
-	"[$$]: Задание: $task\n" >> io($logfile) if $DEBUG;
-	"[$$]: Тип: $type\n" >> io($logfile) if $DEBUG;
-	"[$$]: Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
-	"[$$]: Длина записываемого блока: $length\n" >> io($logfile) if $DEBUG;
-	"[$$]: Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
-	"[$$]: Актуальный размер файлв в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
-	"[$$]: Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Сформировано задание:\n" >> io($logfile) if $DEBUG;
+	"[$$]: *($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Задание: $task\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Тип: $type\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Длина записываемого блока: $length\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Актуальный размер файлв в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: *Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
 	$all->{'count_start'}++;
@@ -230,35 +229,28 @@ sub thread_worker {
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-#		my $fd = POSIX::open( $file, &POSIX::O_RDONLY );
 		sysopen $fh, $file,O_RDONLY or die "Нельзя открыть $file: $!";
 		binmode $fh;
-#		my $off_t = POSIX::lseek($fd,$offset,&POSIX::SEEK_SET);
 		my $bytes=sysread $fh,$data,$length_data,$offset;
 		"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
 		if ($bytes<$length) {
 		    print "[$$]: Ошибка чтения: $bytes < $length\n";
 		    "[$$]: Ошибка чтения: $bytes < $length\n" >> io($logfile) if $DEBUG;
 		}
-#		POSIX::close( $fd );
 		close $fh;
 		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
 	    } else {
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
-#		$fd = POSIX::open($file, &POSIX::O_RDWR|&POSIX::O_NONBLOCK);
 		sysopen $fh, $file,O_RDWR|O_NONBLOCK,660 or die "Нельзя открыть $file: $!";
 		binmode $fh;
 		"[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#		my $off_t = POSIX::lseek($fd,$dataoffset,&POSIX::SEEK_SET);
 #		seek $fh,$dataoffset,SEEK_SET or die "Couldn't seek filehandle: $!";
-#		$bytes = POSIX::write($fd,substr($contents, $offset, $length),$length);
 		my $bytes=syswrite $fh,substr($contents, $offset, $length),$length,$dataoffset;
 		"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
 		if ($bytes<$length) {
 		    print "[$$]: Ошибка записи: $bytes < $length\n";
 		    "[$$]: Ошибка записи: $bytes < $length\n" >> io($logfile) if $DEBUG;
 		}
-#		POSIX::close($fd);
 		close $fh;
 		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
 	    }
