@@ -79,6 +79,10 @@ if ($real_length_data<$length_data) {
 print "Длина буфера чтения: $length_worker\n";
 "[$$]: Длина буфера чтения: $length_worker\n" >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
+$SIG{'KILL'} = sub { threads->exit(); };
+#$SIG{PIPE}='IGNORE';
+#$SIG{INT}='IGNORE';
+#-----------------------------------------------------------------------------
 # Контроллёр.
 sub thread_boss { 
     my $self = threads->self(); 
@@ -198,7 +202,7 @@ sub thread_boss {
 	"[$$]: * Задание: $task\n" >> io($logfile) if $DEBUG;
 	"[$$]: * Тип: $type\n" >> io($logfile) if $DEBUG;
 	"[$$]: * Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Длина записываемого блока: $length\n" >> io($logfile) if $DEBUG;
+	"[$$]: * Длина обрабатываемого блока: $length\n" >> io($logfile) if $DEBUG;
 	"[$$]: * Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
 	"[$$]: * Актуальный размер файла в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
 	"[$$]: * Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
@@ -234,6 +238,11 @@ sub thread_worker {
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
 	if (defined $task) {
 	    "[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
+	    "[$$]: # Получено задание: $task\n" >> io($logfile) if $DEBUG;
+	    "[$$]: # Тип: $type\n" >> io($logfile) if $DEBUG;
+	    "[$$]: # Смещение от начала блока данных: $offset\n" >> io($logfile) if $DEBUG;
+	    "[$$]: # Длина обрабатываемого блока: $length\n" >> io($logfile) if $DEBUG;
+	    "[$$]: # Смещение от начала файла: $dataoffset\n" >> io($logfile) if $DEBUG;
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
 	    	"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
@@ -321,3 +330,5 @@ my @err=threads->list(threads::all);
 #-----------------------------------------------------------------------------
 exit 0;
 #-----------------------------------------------------------------------------
+#Thread 2 terminated abnormally: dataoffset outside of data scalar at ./test_defrag.pl line 271.
+#Signal SIGINT received, but no signal handler set for thread 1
