@@ -276,7 +276,7 @@ sub thread_worker {
         		};
         	    };
 		    "[$$]: Прочитали буфер.\n" >> io($logfile) if $DEBUG;
-		    $wtr->(
+		    $red->(
     			sub {
         		    aio_close $fh, sub {
             			die "close error: $!" if $_[0] < 0;
