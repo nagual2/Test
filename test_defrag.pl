@@ -23,6 +23,7 @@
 #
 # Где --- это чтение, а === это запись, ER -удаление блока из середины файла. 
 #
+$ENV{'THREADS_SOCKET_UNIX'}=1;
 use forks;
 use strict;
 use warnings;
@@ -37,7 +38,7 @@ my $file="/mnt/fs/test01";	# Имя файла для тестирования.
 my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
 my $contents=""; 	# Переменная в которой будет храниться сгенеренные данные.
-my $max_threads=1; 	# Колличество обработчиков.
+my $max_threads=2; 	# Колличество обработчиков.
 my $max_task=1000;	# Максимальное колличество заданий.
 my $free_mem=1024*1024*1024*2; # Всего 2Гб оперативной памяти (своп не считаем).
 my $length_data=1024*1024*1024; 	# Длина данных для записи.
@@ -52,7 +53,8 @@ my $answerreq=Thread::Queue::Any->new;
 my @threads;
 my $all_space=1024*1024*1024*6; # Размер свободного места на диске под тесты (должно измеряться).
 my $logfile="./test_defrag.log";
-my $DEBUG=2;
+my $DEBUG=1;
+
 "[$$]: test_defrag.pl Start\n" > io($logfile) if $DEBUG;
 print "Создадим буфер с данными.\n";
 "[$$]: Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
@@ -128,7 +130,13 @@ sub thread_boss {
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
 	    $all->{$old_task}{'speed_Mb'}=sprintf("%.2f",$all->{$old_task}{'speed'}/1024/0124);
 	    # Если запись добавляем.
-	    $all->{'file_size'}+=($old_length+$old_offset-$all->{$old_task}{'file_size'}) if (($old_type)&&($old_length+$old_offset > $all->{$old_task}{'file_size'}));
+	    if (($old_type==1)&&($old_length+$old_offset > $all->{$old_task}{'file_size'})) {
+		$all->{'file_size'}+=($old_length+$old_offset-$all->{$old_task}{'file_size'});
+	    }
+	    # Если стирание отнимаем.
+	    if ($old_type==2){
+		$all->{'file_size'}-=$old_length;
+	    }
 	    $all->{'file_size_Mb'}=sprintf("%.2f",$all->{'file_size'}/1024/1024);
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
 	    $all->{'free_space_Mb'}=sprintf("%.2f",$all->{'free_space'}/1024/1024);
@@ -197,6 +205,11 @@ sub thread_boss {
 	    } else {
 		# Удаление.
 	    	"[$$]: Выпало удаление (нереализованно).\n" >> io($logfile) if $DEBUG;
+	    	# Не будем удалять блок больше чем блок для записи.
+	    	$length=int rand ($real_length_data);
+	    	"[$$]: Длина блока удаления первичная: $length\n" >> io($logfile) if $DEBUG;
+	    	$offset=int rand ($all->{'file_size'});
+	    	"[$$]: Смещение от начала файла: $offset.\n" >> io($logfile) if $DEBUG;	    		    	
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
 	"[$$]: * Сформировано задание:\n" >> io($logfile) if $DEBUG;
@@ -287,7 +300,7 @@ sub thread_worker {
     			}
 		    );
 		};
-	    } else {
+	    } elsif($type==1) {
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
 		aio_open $file,IO::AIO::O_WRONLY|IO::AIO::O_NONBLOCK,0, sub {
 		    my $fh = shift or die "error while opening: $!";
@@ -325,6 +338,8 @@ sub thread_worker {
     			}
 		    );
 		};
+	    } else {
+	    
 	    }
 	    # Ждем завершения.
 	    IO::AIO::poll while IO::AIO::nreqs;
