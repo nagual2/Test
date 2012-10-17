@@ -103,7 +103,7 @@ sub thread_boss {
         "[$$]".Dumper($all) >> io($logfile) if ($DEBUG>1);
 	# Не ждем результаты.
 	"[$$]: Не ждём результат\n" >> io($logfile) if $DEBUG;
-	my ($old_task,$old_type,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)=$answerreq->dequeue_dontwait;
+	my ($old_task,$old_type,$old_offset,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)=$answerreq->dequeue_dontwait;
 	if (defined $old_task) {
 	    "[$$]: Есть результат:\n" >> io($logfile) if $DEBUG;
 	    "[$$]: ($old_task,$old_type,$old_offset,$old_length,$start_seconds,$start_microseconds,$stop_seconds, $stop_microseconds)\n" >> io($logfile) if $DEBUG;
@@ -117,6 +117,7 @@ sub thread_boss {
 	    } else {
 		$all->{$old_task}{'type_sim'}="rw";
 	    }
+	    $all->{$old_task}{'offset'}=$old_offset;
 	    $all->{$old_task}{'length'}=$old_length;
 	    $all->{$old_task}{'length_Mb'}=sprintf("%.2f",$old_length/1024/1024);
 	    $all->{$old_task}{'start_seconds'}=$start_seconds;
