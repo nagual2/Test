@@ -59,6 +59,11 @@ my $DEBUG=1;
 print "Создадим буфер с данными.\n";
 "[$$]: Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
+$SIG{'KILL'} = sub { threads->exit(); };
+#$SIG{PIPE}='IGNORE';
+#$SIG{INT}='IGNORE';
+IO::AIO::min_parallel ($max_threads-1);
+#-----------------------------------------------------------------------------
 aio_open $data, IO::AIO::O_RDONLY, 0, sub {
     my $fh = shift or die "error while opening: $!";
     aio_read $fh, 0, $length_data, $contents, 0, sub {
@@ -70,7 +75,8 @@ aio_open $data, IO::AIO::O_RDONLY, 0, sub {
     };
 };
 # Ждем завершения.
-IO::AIO::flush;
+#IO::AIO::flush;
+IO::AIO::poll while IO::AIO::nreqs;
 if ($real_length_data<$length_data) {
     print "Мало памяти для тестирования.\n";
     "[$$]: Мало памяти для тестирования.\n" >> io($logfile) if $DEBUG;
@@ -78,10 +84,6 @@ if ($real_length_data<$length_data) {
 }
 print "Длина буфера чтения: $length_worker\n";
 "[$$]: Длина буфера чтения: $length_worker\n" >> io($logfile) if $DEBUG;
-#-----------------------------------------------------------------------------
-$SIG{'KILL'} = sub { threads->exit(); };
-#$SIG{PIPE}='IGNORE';
-#$SIG{INT}='IGNORE';
 #-----------------------------------------------------------------------------
 # Контроллёр.
 sub thread_boss { 
@@ -252,7 +254,7 @@ sub thread_worker {
     		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
 #    			$_[0] == $length_data or die "short read: $!";
 			if ($_[0] < $length) {
-			    "[$$]: Ошибка чтения: ".$_[0]." < $length\n" >> io($logfile) if $DEBUG;
+			    "[$$]: # Ошибка чтения: ".$_[0]." < $length\n" >> io($logfile) if $DEBUG;
 			}
 			close $fh;
 			"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
@@ -264,19 +266,36 @@ sub thread_worker {
 		aio_open $file,IO::AIO::O_WRONLY|IO::AIO::O_NONBLOCK,0, sub {
 		    my $fh = shift or die "error while opening: $!";
 		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
-#			$_[0] > 0 or die "write error: $!";
-			if ($_[0] < $length) {
-			    "[$$]: Ошибка записи: ".$_[0]." < $length\n" >> io($logfile) if $DEBUG;
-			}
-    			close $fh;
-    			"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
-			"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
+		    my $wtr;
+		    $wtr = sub {
+    			my $done_cb = shift;
+			aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
+			$_[0] > 0 or die "write error: $!";
+			"[$$]: Пишем: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
+        		if ( length $wbuf ) {
+        		    $offset+=$_[0];
+        		    $dataoffset+=$_[0];
+        		    $length-=$_[0];
+            		    $wtr->($done_cb);
+        		} else {
+            		    undef $wtr;
+            		    $done_cb->();
+        		}			
 		    };
 		};
+		"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
+		$wtr->(
+    		    sub {
+        		aio_close $fh, sub {
+            		    die "close error: $!" if $_[0] < 0;
+            		    "[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+        		};
+    		    }
+		);
 	    }
 	    # Ждем завершения.
-	    IO::AIO::flush;	    
+	    # IO::AIO::flush;
+	    IO::AIO::poll while IO::AIO::nreqs; 
 	    # Отправляем отчет.
 	    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
 	    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
@@ -296,7 +315,8 @@ aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONB
     my $fh = shift or die "error while opening: $!";
     close $fh;
 };
-IO::AIO::flush;
+#IO::AIO::flush;
+IO::AIO::poll while IO::AIO::nreqs;
 
 # Запускаем контрллер.
 "[$$]: Запускаем контроллер.\n" >> io($logfile) if $DEBUG;
@@ -332,3 +352,8 @@ exit 0;
 #-----------------------------------------------------------------------------
 #Thread 2 terminated abnormally: dataoffset outside of data scalar at ./test_defrag.pl line 271.
 #Signal SIGINT received, but no signal handler set for thread 1
+#			if ($_[0] < $length) {
+#			    "[$$]: Ошибка записи: ".$_[0]." < $length\n" >> io($logfile) if $DEBUG;
+#			}
+#    			close $fh;
+#			substr $wbuf, 0, $_[0], '';
