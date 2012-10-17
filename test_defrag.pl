@@ -127,7 +127,8 @@ sub thread_boss {
 	    $all->{$old_task}{'time_diff'}=tv_interval ([$start_seconds,$start_microseconds],[$stop_seconds,$stop_microseconds]);
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
 	    $all->{$old_task}{'speed_Mb'}=sprintf("%.2f",$all->{$old_task}{'speed'}/1024/0124);
-	    $all->{'file_size'}+=($old_length+$old_offset-$all->{$old_task}{'file_size'}) if $old_type; 	# Если запись добавляем.
+	    # Если запись добавляем.
+	    $all->{'file_size'}+=($old_length+$old_offset-$all->{$old_task}{'file_size'}) if (($old_type)&&($old_length+$old_offset > $all->{$old_task}{'file_size'}));
 	    $all->{'file_size_Mb'}=sprintf("%.2f",$all->{'file_size'}/1024/1024);
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
 	    $all->{'free_space_Mb'}=sprintf("%.2f",$all->{'free_space'}/1024/1024);
