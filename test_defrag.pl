@@ -31,9 +31,10 @@ use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval usleep);
 use threads;
 use Thread::Queue::Any;
-use POSIX 'SEEK_SET';
-use Fcntl 'O_RDONLY','O_RDWR','O_CREAT','O_TRUNC','O_NONBLOCK';
+#use POSIX 'SEEK_SET';
+#use Fcntl 'O_RDONLY','O_RDWR','O_CREAT','O_TRUNC','O_NONBLOCK';
 use IO::All;
+use IO::AIO;
 my $file="/mnt/fs/test01";	# Имя файла для тестирования.
 my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
@@ -58,11 +59,18 @@ my $DEBUG=1;
 print "Создадим буфер с данными.\n";
 "[$$]: Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
 #-----------------------------------------------------------------------------
-sysopen $fh, $data,O_RDONLY or die "Нельзя открыть $data: $!";
-sysread $fh,$contents,$length_data,0;
-close $fh;
-$real_length_data=length($contents);
-print "Буфер записи создан, размер: ".$real_length_data."\n";
+aio_open $data, IO::AIO::O_RDONLY, 0, sub {
+    my $fh = shift or die "error while opening: $!";
+    aio_read $fh, 0, $length_data, $contents, 0, sub {
+	$_[0] == $length_data or die "short read: $!";
+	close $fh;
+	$real_length_data=length($contents);
+	print "Буфер создан, размер: ".$real_length_data."\n";
+	"[$$]: Буфер создан, размер: ".$real_length_data."\n" >> io($logfile) if $DEBUG;
+    };
+};
+# Ждем завершения.
+IO::AIO::flush;
 if ($real_length_data<$length_data) {
     print "Мало памяти для тестирования.\n";
     "[$$]: Мало памяти для тестирования.\n" >> io($logfile) if $DEBUG;
@@ -218,42 +226,48 @@ sub thread_worker {
     "[$$]: Запуск обработчика, tid=$tid i=$i\n" >> io($logfile) if $DEBUG;
     my $exit=0;		# Условие выхода ( 1 - выход). 
     my $data="";	# Сюда будем читать.
+    # You might get around by not using IO::AIO before (or after) forking. 
+    IO::AIO::reinit;
     while (not $exit) {
 	# Ждем задание.
 	"[$$]: Ждем задание:\n" >> io($logfile) if $DEBUG;
 	my ($task,$type,$offset,$length,$dataoffset)= $taskreq->dequeue;
 	if (defined $task) {
-#	    usleep(100);
 	    "[$$]: ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
 	    my ($start_seconds, $start_microseconds) = gettimeofday; # Время старта операции.
 	    unless($type){
-		"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-		sysopen $fh, $file,O_RDONLY|O_NONBLOCK or die "Нельзя открыть $file: $!";
-		binmode $fh;
-		my $bytes=sysread $fh,$data,$length_data,$offset;
-		"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
-		if ($bytes<$length) {
-		    print "[$$]: Ошибка чтения: $bytes < $length\n";
-		    "[$$]: Ошибка чтения: $bytes < $length\n" >> io($logfile) if $DEBUG;
-		}
-		close $fh;
-		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
+		aio_open $file,IO::AIO::O_RDONLY|IO::AIO::O_NONBLOCK,0, sub {
+		    my $fh = shift or die "error while opening: $!";
+		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
+    		    aio_read $fh, $offset, $length, $data, $dataoffset, sub {
+#    			$_[0] == $length_data or die "short read: $!";
+			if ($_[0] < $length) {
+			    "[$$]: Ошибка чтения: ".$_[0]." < $length\n" >> io($logfile) if $DEBUG;
+			}
+			close $fh;
+			"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+			"[$$]: Прочитали в буфер.\n" >> io($logfile) if $DEBUG;
+    		    };
+		};
 	    } else {
 		"[$$]: Открываем файл: $file для записи.\n" >> io($logfile) if $DEBUG;
-		sysopen $fh, $file,O_RDWR|O_NONBLOCK,660 or die "Нельзя открыть $file: $!";
-		binmode $fh;
-		"[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#		seek $fh,$dataoffset,SEEK_SET or die "Couldn't seek filehandle: $!";
-#		Offset outside string at ./test_defrag.pl line 247.
-		my $bytes=syswrite $fh,substr($contents, $offset, $length),$length,$dataoffset;
-		"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
-		if ($bytes<$length) {
-		    print "[$$]: Ошибка записи: $bytes < $length\n";
-		    "[$$]: Ошибка записи: $bytes < $length\n" >> io($logfile) if $DEBUG;
-		}
-		close $fh;
-		"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+		aio_open $file,IO::AIO::O_WRONLY|IO::AIO::O_NONBLOCK,0, sub {
+		    my $fh = shift or die "error while opening: $!";
+		    "[$$]: Файл: $file открыт\n" >> io($logfile) if $DEBUG;
+		    aio_write $fh,$offset,$length, $contents,$dataoffset, sub {
+#			$_[0] > 0 or die "write error: $!";
+			if ($_[0] < $length) {
+			    "[$$]: Ошибка записи: ".$_[0]." < $length\n" >> io($logfile) if $DEBUG;
+			}
+    			close $fh;
+    			"[$$]: Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+			"[$$]: Записали буфер.\n" >> io($logfile) if $DEBUG;
+		    };
+		};
 	    }
+	    # Ждем завершения.
+	    IO::AIO::flush;	    
 	    # Отправляем отчет.
 	    "[$$]: Отправляем отчет.\n" >> io($logfile) if $DEBUG;
 	    my ($stop_seconds, $stop_microseconds) = gettimeofday; # Время завершения операции.
@@ -269,8 +283,11 @@ sub thread_worker {
 #-----------------------------------------------------------------------------
 # Создаём наш тестовый файл.
 "[$$]: Создаём наш тестовый файл: $file\n" >> io($logfile) if $DEBUG;
-sysopen $fh, $file,O_RDONLY|O_RDWR|O_CREAT|O_TRUNC|O_NONBLOCK,660 or die "Нельзя открыть $file: $!";
-close $fh;
+aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC|IO::AIO::O_NONBLOCK,0644,sub {
+    my $fh = shift or die "error while opening: $!";
+    close $fh;
+};
+IO::AIO::flush;
 
 # Запускаем контрллер.
 "[$$]: Запускаем контроллер.\n" >> io($logfile) if $DEBUG;
@@ -304,20 +321,3 @@ my @err=threads->list(threads::all);
 #-----------------------------------------------------------------------------
 exit 0;
 #-----------------------------------------------------------------------------
-#		unless ($all->{'free_space'}) {
-		    # Свободного мета нет - пишем в середину.
-#		    "[$$]: Свободного мета нет - пишем в середину.\n" >> io($logfile) if $DEBUG;
-#	    	    $dataoffset=$all->{'file_size'} if ($dataoffset > $all->{'file_size'});
-#		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
-#	        } else {
-	            # Свободное мето есть.
-#	            "[$$]: Свободное мето есть.\n" >> io($logfile) if $DEBUG;
-#		    $dataoffset=int rand($all->{'file_size'});		# 0 - file_size
-#		    "[$$]: Смещение от начала файла: $dataoffset.\n" >> io($logfile) if $DEBUG;
-		    # Файл не должен выйти за пределы свободного места на диске.
-#		    my $length0=$all->{'file_size'}+$all->{'free_space'}-$dataoffset if ($dataoffset+$length > $all->{'file_size'}+$all->{'free_space'});
-		    # Чтение данных не должно выйти за пределы блока памяти.
-#	    	    $length=$real_length_data-$offset if ($length+$offset > $real_length_data);
-#	    	    $length=$length0 if ($length0 < $length);	    	    
-#		    "[$$]: Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
-#		}
