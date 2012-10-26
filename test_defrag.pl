@@ -36,6 +36,7 @@ use Thread::Queue::Any;
 use IO::All;
 use IO::AIO;
 my $file="/mnt/fs/test01";	# Имя файла для тестирования.
+my $file_system="/mnt/fs";		# Имя FS.
 my $fh;				# Дескриптор файла тестирования.
 my $data="/dev/random"; # $data="/dev/zero"; # Вариант с zero тест на SendForce2.
 my $contents=""; 	# Переменная в которой будет храниться сгенеренные данные.
@@ -139,28 +140,42 @@ sub thread_boss {
 		$all->{'file_size'}-=$old_length;
 	    }
 	    "[$$]: * Статистика $file:\n" >> io($logfile) if ($DEBUG>0);
-	    "[$$]: #r Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-	    aio_open $file,IO::AIO::O_RDONLY,0, sub { # |IO::AIO::O_NONBLOCK
-	        my $fh = shift or die "error while opening: $!";
-	        "[$$]: #r Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-	        my $rd;
-		$rd = sub {
-    		    my $done_cb = shift; # Итак воспользуеммя прелестями замыканий.
-		    aio_statvfs $fh, sub {
-#	       my $stats = $_[0] or die "statvfs: $!";
-	    	    "[$$]: * ".Dumper($_[0]) >> io($logfile) if ($DEBUG>0);
-	    	    undef $rd;
-            	    $done_cb->();
-		};
-		$rd->(
-    		    sub {
-        	        aio_close $fh, sub {
-            		    die "close error: $!" if $_[0] < 0;
-            		    "[$$]: #r Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
-        		};
-    		    }
-		);
+	    aio_stat $file, sub {
+		$_[0] and die "stat failed: $!"; # stat
+	        # stat'ing filehandles is generally non-blocking
+	        my $size = -s $fh;
+	        "[$$]: * Размер файла $file: $size\n" >> io($logfile) if ($DEBUG>0);
 	    };
+	    aio_statvfs $file_system, sub {
+		my $stats = $_[0] or die "statvfs: $!"; # statvfs
+	    	"[$$]: * ".Dumper($_[0]) >> io($logfile) if ($DEBUG>0);
+	    };
+#	    "[$$]: #r Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
+#	    aio_open $file,IO::AIO::O_RDONLY,0, sub { # |IO::AIO::O_NONBLOCK
+#	        my $fh = shift or die "error while opening: $!";
+#	        "[$$]: #r Файл: $file открыт\n" >> io($logfile) if $DEBUG;
+#	        # stat'ing filehandles is generally non-blocking
+#	        my $size = -s $fh;
+#	        my $rd;
+#		$rd = sub {
+#    		    my $done_cb = shift; # Итак воспользуеммя прелестями замыканий.
+#		    aio_stat $fh, sub {
+#		    	$_[0] and die "stat failed: $!"; # stat
+#	      		 my $stats = $_[0] or die "statvfs: $!"; # statvfs
+#	    		"[$$]: * ".Dumper($_[0]) >> io($logfile) if ($DEBUG>0);
+#	    		undef $rd;
+#            		$done_cb->();
+#		    };
+#		};
+#		$rd->(
+#    		    sub {
+#        	    	aio_close $fh, sub {
+#            		    die "close error: $!" if $_[0] < 0;
+#            		    "[$$]: #r Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+#        		};
+#    		    }
+#		);
+#	    };
 	    IO::AIO::poll while IO::AIO::nreqs; # Ждем завершения.
 	    $all->{'file_size_Mb'}=sprintf("%.2f",$all->{'file_size'}/1024/1024);
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
