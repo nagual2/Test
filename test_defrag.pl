@@ -10,7 +10,12 @@
 #
 # План такой: осуществляем операции записи и чтения на тестируемый диск от 0% заполненности файлами
 # до 100% и вычисляем средние скорости чтения и записи. Как только скорости чтения и записи перестануть
-# падать, считаем фрагментацию максимальной а скорости результирующими для данной фс.
+# падать, считаем фрагментацию максимальной а скорости результирующими для данной фс. На самом деле сложнее:
+# 1) чтение только для тестов;
+# 2a) запись (диск еще не заполнен) если в конец то просто запись если в середину то сначала пишем во временный 
+# файл потом вставляем его в середину (нереализованно);
+# 2б) запись (диск заполнен) пишем как обычно;
+# 3) удаление - вырезаем блок из середины во временны файл и добавляем его в конец.
 #
 # ^ N (Колличество потоков)
 # |
@@ -27,7 +32,7 @@ $ENV{'THREADS_SOCKET_UNIX'}=1;
 use forks;
 use strict;
 use warnings;
-use diagnostics;
+#use diagnostics;
 use v5.14;
 use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval usleep);
@@ -43,7 +48,7 @@ my $contents=""; 	# Переменная в которой будет храни
 my $max_threads=1; 	# Колличество обработчиков.
 my $max_task=1000;	# Максимальное колличество заданий.
 my $free_mem=1024*1024*1024*2; 		# Всего 2Гб оперативной памяти (своп не считаем).
-my $length_data=1024*1024*1024; 	# Длина данных для записи.
+my $length_data=1024*1024*100; 	# Длина данных для записи.
 my $real_length_data;			# То же.
 my $w_syze=1024*1024*100;		# Объём памяти зарезирвированный под каждый обработчик.
 my $rezerv=($max_threads+1)*$w_syze;
@@ -56,6 +61,20 @@ my @threads;
 my $all_space=1024*1024*1024*6; # Размер свободного места на диске под тесты (должно измеряться).
 my $logfile="./test_defrag.log";
 my $DEBUG=1;
+#Статистика FS:
+#$VAR1 = {
+#   'bsize' => 32768,		/* file system block size */
+#   'bfree' => 1522301,		/* # free blocks */
+#   'blocks' => 1522519,	/* size of fs in f_frsize units */
+#   'files' => 802558,		/* # inodes */
+#   'flag' => 0,		/* mount flags */
+#   'favail' => 802555,		/* # free inodes for unprivileged users */
+#   'bavail' => 1400500,	/* # free blocks for unprivileged users */
+#   'ffree' => 802555,		/* # free inodes */
+#   'namemax' => 255,		/* maximum filename length */
+#   'frsize' => 4096,		/* fragment size */
+#   'fsid' => 0			/* file system ID */
+#;
 "[$$]: test_defrag.pl Start\n" > io($logfile) if $DEBUG;
 print "Создадим буфер с данными.\n";
 "[$$]: Создадим буфер с данными.\n" >> io($logfile) if $DEBUG;
@@ -131,51 +150,51 @@ sub thread_boss {
 	    $all->{$old_task}{'time_diff'}=tv_interval ([$start_seconds,$start_microseconds],[$stop_seconds,$stop_microseconds]);
 	    $all->{$old_task}{'speed'}=$old_length/$all->{$old_task}{'time_diff'};
 	    $all->{$old_task}{'speed_Mb'}=sprintf("%.2f",$all->{$old_task}{'speed'}/1024/0124);
-	    # Если запись добавляем.
-	    if (($old_type==1)&&($old_length+$old_offset > $all->{$old_task}{'file_size'})) {
-		$all->{'file_size'}+=($old_length+$old_offset-$all->{$old_task}{'file_size'});
-	    }
-	    # Если стирание отнимаем.
-	    if ($old_type==2){
-		$all->{'file_size'}-=$old_length;
-	    }
-	    "[$$]: * Статистика $file:\n" >> io($logfile) if ($DEBUG>0);
-	    aio_stat $file, sub {
-		$_[0] and die "stat failed: $!"; # stat
-	        # stat'ing filehandles is generally non-blocking
-	        my $size = -s $fh;
-	        "[$$]: * Размер файла $file: $size\n" >> io($logfile) if ($DEBUG>0);
+#	    # Если запись добавляем.
+#	    if (($old_type==1)&&($old_length+$old_offset > $all->{$old_task}{'file_size'})) {
+#		$all->{'file_size'}+=($old_length+$old_offset-$all->{$old_task}{'file_size'});
+#	    }
+#	    # Если стирание отнимаем.
+#	    if ($old_type==2){
+#		$all->{'file_size'}-=$old_length;
+#	    }
+	    "[$$]: *s Статистика $file:\n" >> io($logfile) if ($DEBUG>0);
+	    "[$$]: *s Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
+	    # stat'ing filehandles is generally non-blocking
+	    aio_open $file,IO::AIO::O_RDONLY,0, sub { # |IO::AIO::O_NONBLOCK
+	        my $fh = shift or die "error while opening: $!";
+	        "[$$]: *s Файл: $file открыт\n" >> io($logfile) if $DEBUG;
+		$all->{'file_size'} = -s $fh;
+	    	"[$$]: *s Размер файла $file: ".$all->{'file_size'}."\n" >> io($logfile) if ($DEBUG>0);
+	        my $rd;
+		$rd = sub {
+    		    my $done_cb = shift; # Итак воспользуеммя прелестями замыканий
+    		    "[$$]: *s Статистика FS:\n" >> io($logfile) if ($DEBUG>1);
+	    	    aio_statvfs $file, sub {
+	    		my $stats = $_[0] or die "statvfs: $!"; # statvfs
+	    		"[$$]: *s ".Dumper($stats) >> io($logfile) if ($DEBUG>0);
+			"[$$]: *s Размер файла :".($all->{'file_size'}/1024/1024)." Mb\n" >> io($logfile) if ($DEBUG>0);
+	    		my $a1=$stats->{'frsize'}*$stats->{'bfree'}/1024/1024;
+	    		"[$$]: *s Доступно места: frsize*bfree=$a1 Mb\n" >> io($logfile) if ($DEBUG>0);
+	    		my $a2=$stats->{'frsize'}*$stats->{'bavail'}/1024/1024+$all->{'file_size'}/1024/1024;
+	    		"[$$]: *s На самом деле доступночуть меньше: frsize*bavail=$a2 Mb\n" >> io($logfile) if ($DEBUG>0);
+	    		my $a3=$stats->{'blocks'}*$stats->{'frsize'}/1024/1024;
+    			"[$$]: *s Реально доступное пространство: blocks*frsize=$a3 Mb\n" >> io($logfile) if ($DEBUG>0);
+	    		my $a4=$stats->{'bsize'}*$stats->{'ffree'}/$stats->{'frsize'}/1024;
+	    		"[$$]: *s Теоритический размер диска: bsize*ffree/frsize=$a4 Mb\n" >> io($logfile) if ($DEBUG>0);
+			undef $rd;
+            		$done_cb->();
+		    };
+		};
+		$rd->(
+    		    sub {
+        	    	aio_close $fh, sub {
+            		    die "close error: $!" if $_[0] < 0;
+            		    "[$$]: *s Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+        		};
+    		    }
+		);
 	    };
-	    aio_statvfs $file_system, sub {
-		my $stats = $_[0] or die "statvfs: $!"; # statvfs
-	    	"[$$]: * ".Dumper($_[0]) >> io($logfile) if ($DEBUG>0);
-	    };
-#	    "[$$]: #r Открываем файл: $file для чтения.\n" >> io($logfile) if $DEBUG;
-#	    aio_open $file,IO::AIO::O_RDONLY,0, sub { # |IO::AIO::O_NONBLOCK
-#	        my $fh = shift or die "error while opening: $!";
-#	        "[$$]: #r Файл: $file открыт\n" >> io($logfile) if $DEBUG;
-#	        # stat'ing filehandles is generally non-blocking
-#	        my $size = -s $fh;
-#	        my $rd;
-#		$rd = sub {
-#    		    my $done_cb = shift; # Итак воспользуеммя прелестями замыканий.
-#		    aio_stat $fh, sub {
-#		    	$_[0] and die "stat failed: $!"; # stat
-#	      		 my $stats = $_[0] or die "statvfs: $!"; # statvfs
-#	    		"[$$]: * ".Dumper($_[0]) >> io($logfile) if ($DEBUG>0);
-#	    		undef $rd;
-#            		$done_cb->();
-#		    };
-#		};
-#		$rd->(
-#    		    sub {
-#        	    	aio_close $fh, sub {
-#            		    die "close error: $!" if $_[0] < 0;
-#            		    "[$$]: #r Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
-#        		};
-#    		    }
-#		);
-#	    };
 	    IO::AIO::poll while IO::AIO::nreqs; # Ждем завершения.
 	    $all->{'file_size_Mb'}=sprintf("%.2f",$all->{'file_size'}/1024/1024);
 	    $all->{'free_space'}=$all_space-$all->{'file_size'};# Свободное место что осталось.
@@ -204,11 +223,11 @@ sub thread_boss {
 		next; # Если нет результатов и есть задания для всех обработчиков - пропускаем ход.
 	    }
 	}
-	    "[$$]: * Ставим задания.\n" >> io($logfile) if $DEBUG;
+	    "[$$]: *t Ставим задания.\n" >> io($logfile) if $DEBUG;
 	    # Ставим задания.
 	    $type=int rand 2; # 0 - чтение, 1 - запись, 2 - удаление.
 	    unless ($type){
-		"[$$]: * Выпало чтение.\n" >> io($logfile) if $DEBUG;
+		"[$$]: *t Выпало чтение.\n" >> io($logfile) if $DEBUG;
 		next unless $all->{'file_size'}; # Если читать нечего пропускаем ход.
 #		next;
 		$offset=int rand $all->{'file_size'};
@@ -216,51 +235,51 @@ sub thread_boss {
 		# $length=int rand ($all->{'file_size'}-$offset);
 		# блок чтения неможет выйти за ограничения памяти.
 		$length=int rand ($length_worker);
-		"[$$]: * Длина чтения первичная: $length\n" >> io($logfile) if $DEBUG;
+		"[$$]: *t Длина чтения первичная: $length\n" >> io($logfile) if $DEBUG;
 		# Чтение (не может быть за пределами файла.)
 		$length=$all->{'file_size'}-$offset if ($length >$all->{'file_size'}-$dataoffset);
-		"[$$]: * Длина чтения после проверок: $length\n" >> io($logfile) if $DEBUG;
+		"[$$]: *t Длина чтения после проверок: $length\n" >> io($logfile) if $DEBUG;
 		$dataoffset=0;					# 0 так как чтение.
 	    } elsif($type==1) {
-	    	"[$$]: * Выпала запись.\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Выпала запись.\n" >> io($logfile) if $DEBUG;
 		$dataoffset=int rand $real_length_data; 		# 0 - $real_length_data
-		"[$$]: * Смещение первичное: $dataoffset\n" >> io($logfile) if $DEBUG;
+		"[$$]: *t Смещение первичное: $dataoffset\n" >> io($logfile) if $DEBUG;
 		# Длина записи неможет быть больше блока данных.
 		$length=int rand ($real_length_data-$dataoffset); 	# 0 - ($real_length_data-$offset)
-		"[$$]: * Длина записи первичная: $length\n" >> io($logfile) if $DEBUG;
+		"[$$]: *t Длина записи первичная: $length\n" >> io($logfile) if $DEBUG;
 		# Запись.
 	        # Возможны два режима:
 		# 1) Диск еще не забит полностью и мы дописываем.
 	        # 2) Диск забит полностью и пишем в середину.
 	        $offset=int rand ($all->{'file_size'}); 	# 0 - file_size
-	    	"[$$]: * Смещение от начала файла: $offset.\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Смещение от начала файла: $offset.\n" >> io($logfile) if $DEBUG;
 	    	# Файл не должен выйти за пределы свободного места на диске.
 		my $length0=$length;
 		$length0=$all->{'file_size'}+$all->{'free_space'}-$offset if ($offset+$length > $all->{'file_size'}+$all->{'free_space'});
 		# Чтение данных не должно выйти за пределы блока памяти.
 	    	$length=$real_length_data if ($length+$offset > $real_length_data);
 	    	$length=$length0 if ($length0 < $length);
-	    	"[$$]: * Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
-	    	"[$$]: * Смещение после проверок: $dataoffset\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Длина записи после проверок: $length\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Смещение после проверок: $dataoffset\n" >> io($logfile) if $DEBUG;
 	    } else {
 		# Удаление.
-	    	"[$$]: * Выпало удаление (нереализованно).\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Выпало удаление (нереализованно).\n" >> io($logfile) if $DEBUG;
 	    	# Не будем удалять блок больше чем блок для записи.
 	    	$length=int rand ($real_length_data);
-	    	"[$$]: * Длина блока удаления первичная: $length\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Длина блока удаления первичная: $length\n" >> io($logfile) if $DEBUG;
 	    	$offset=int rand ($all->{'file_size'});
-	    	"[$$]: * Смещение от начала файла: $offset.\n" >> io($logfile) if $DEBUG;
+	    	"[$$]: *t Смещение от начала файла: $offset.\n" >> io($logfile) if $DEBUG;
 	    }	
 	# Мы сюда не дойдём если у кажого обработчика есть задание.
-	"[$$]: * Сформировано задание:\n" >> io($logfile) if $DEBUG;
-	"[$$]: * ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Задание: $task\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Тип: $type\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Смещение от начала файла: $offset\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Длина обрабатываемого блока: $length\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Смещение от начала блока данных: $dataoffset\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Актуальный размер файла в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
-	"[$$]: * Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Сформировано задание:\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t ($task,$type,$offset,$length,$dataoffset)\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Задание: $task\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Тип: $type\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Смещение от начала файла: $offset\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Длина обрабатываемого блока: $length\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Смещение от начала блока данных: $dataoffset\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Актуальный размер файла в этот момент: ".$all->{'file_size'}."\n" >> io($logfile) if $DEBUG;
+	"[$$]: *t Остаток свободного места в этот момент: ".$all->{'free_space'}."\n" >> io($logfile) if $DEBUG;
 	$all->{$task}{'file_size'}=$all->{'file_size'}; # Размеер файла на момет начала операции.
 	$taskreq->enqueue($task,$type,$offset,$length,$dataoffset);
 	$task++;
@@ -285,7 +304,7 @@ sub thread_worker {
     my $tid = $self->tid();
     "[$$]: # Запуск обработчика, tid=$tid i=$i\n" >> io($logfile) if $DEBUG;
     my $exit=0;		# Условие выхода ( 1 - выход).
-    my $data="";	# Сюда будем читать.
+    my $data="";	# Сюда будем читать. nagual: my $x = q{ } x 100_000_000; $x = q{};
     # You might get around by not using IO::AIO before (or after) forking.
     IO::AIO::reinit;
     while (not $exit) {
