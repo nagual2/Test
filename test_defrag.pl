@@ -58,7 +58,7 @@ my $length_worker=int(($free_mem-$length_data-$rezerv)/$max_threads);
 my $taskreq=Thread::Queue::Any->new;
 my $answerreq=Thread::Queue::Any->new;
 my @threads;
-my $all_space=1024*1024*1024*6; # Размер свободного места на диске под тесты (должно измеряться).
+my $all_space; # Размер свободного места на диске под тесты (должно измеряться).
 my $logfile="./test_defrag.log";
 my $DEBUG=1;
 #Статистика FS:
@@ -177,7 +177,7 @@ sub thread_boss {
 	    		my $a1=$stats->{'frsize'}*$stats->{'bfree'}/1024/1024;
 	    		"[$$]: *s Доступно места: frsize*bfree=$a1 Mb\n" >> io($logfile) if ($DEBUG>0);
 	    		my $a2=$stats->{'frsize'}*$stats->{'bavail'}/1024/1024+$all->{'file_size'}/1024/1024;
-	    		"[$$]: *s На самом деле доступночуть меньше: frsize*bavail=$a2 Mb\n" >> io($logfile) if ($DEBUG>0);
+	    		"[$$]: *s На самом деле доступно чуть меньше: frsize*bavail=$a2 Mb\n" >> io($logfile) if ($DEBUG>0);
 	    		my $a3=$stats->{'blocks'}*$stats->{'frsize'}/1024/1024;
     			"[$$]: *s Реально доступное пространство: blocks*frsize=$a3 Mb\n" >> io($logfile) if ($DEBUG>0);
 	    		my $a4=$stats->{'bsize'}*$stats->{'ffree'}/$stats->{'frsize'}/1024;
@@ -425,7 +425,24 @@ sub thread_worker {
 "[$$]: Создаём наш тестовый файл: $file\n" >> io($logfile) if $DEBUG;
 aio_open $file,IO::AIO::O_RDWR|IO::AIO::O_CREAT|IO::AIO::O_TRUNC,0644,sub {
     my $fh = shift or die "error while opening: $!";
-    close $fh;
+    $rd = sub {
+        my $done_cb = shift; # Итак воспользуеммя прелестями замыканий
+        "[$$]: *s Статистика FS:\n" >> io($logfile) if ($DEBUG>1);
+	aio_statvfs $file, sub {
+	    my $stats = $_[0] or die "statvfs: $!"; # statvfs
+	    $all_space=$stats->{'bsize'}*$stats->{'ffree'}/$stats->{'frsize'};
+	    undef $rd;
+            $done_cb->();
+	};
+    };
+    $rd->(
+	sub {
+    	    aio_close $fh, sub {
+        	die "close error: $!" if $_[0] < 0;
+            	"[$$]: *s Файл: $file закрыт\n" >> io($logfile) if $DEBUG;
+    	    };
+    	}
+    );
 };
 IO::AIO::poll while IO::AIO::nreqs;
 
