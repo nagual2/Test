@@ -54,6 +54,6 @@ TESTSIZE="-s 6600m:128k -r 800m"
 1) исправить скрипт фрагментации - задать диск
 2) добавить тест фрагментации для xfs (http://wiki.enchtex.info/tools/system/xfs_fsr)
 3) тестирование zfs c компрессией (zfs create -o compression=gzip users/home/snapshots lzjb|gzip1-9)
-4) тестирование mysql в том числе и с zfs как raw (zfs create -V <size of device> <poolname>/<zvolname>)
+4) тестирование mysql (http://dimitrik.free.fr/db_STRESS.html) в том числе и с zfs как raw (zfs create -V <size of device> <poolname>/<zvolname>)
 
 
