@@ -50,10 +50,11 @@ mdpool  6,94G    77K  6,94G     0%  1.00x  ONLINE  -
 TESTSIZE="-s 6600m:128k -r 800m"
 под тест bonnie++ используем 6600 мегабайт блоками 128k и под кеширование 800 мегабайт.
 
-В будущем:
-1) исправить скрипт фрагментации - задать диск
+В планах:
+1) исправить скрипт фрагментации добавить передаху диска и тип fs через параметры командной строки.
 2) добавить тест фрагментации для xfs (http://wiki.enchtex.info/tools/system/xfs_fsr)
 3) тестирование zfs c компрессией (zfs create -o compression=gzip users/home/snapshots lzjb|gzip1-9)
 4) тестирование mysql (http://dimitrik.free.fr/db_STRESS.html) в том числе и с zfs как raw (zfs create -V <size of device> <poolname>/<zvolname>)
-
+5) Добавить тест во время и после создания снапшета LVM.
+6) Добавить тест во время fsсk.
 
