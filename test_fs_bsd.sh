@@ -12,26 +12,28 @@ LOGFILE="test_fs_bsd.log"
 exec 1>$LOGFILE 2>&1
 TESTBONNIE="NO"
 TESTDD="NO"
-TEST01="YES" # "-m UFS -O2"
-TEST02="YES" # "-m UFS4k -O2"
-TEST03="YES" # "-m UFS -O2 -U"
-TEST04="YES" # "-m UFS4k -O2 -U" & "-m UFS4k -O2 -U & snap"
-TEST05="YES" # "-m UFS -O2 -U -j"
-TEST06="YES" # "-m UFS4k -O2 -U -j"
-TEST07="YES" # "-m UFS -O2 -U -j -t"
-TEST08="YES" # "-m UFS4k -O2 -U -j -t"
+CHECKSUM="ON"
+ZIL="ON"
+TEST01="YES" # "-m UFS    -O2"
+TEST02="YES" # "-m UFS 4k -O2"
+TEST03="YES" # "-m UFS    -O2 -U"
+TEST04="YES" # "-m UFS 4k -O2 -U" & "-m UFS4k -O2 -U & snap"
+TEST05="YES" # "-m UFS    -O2 -U -j"
+TEST06="YES" # "-m UFS 4k -O2 -U -j"
+TEST07="YES" # "-m UFS    -O2 -U -j -t"
+TEST08="YES" # "-m UFS 4k -O2 -U -j -t"
 TEST09="YES" # "-m ZFS"
 TEST10="YES" # "-m ZFS 4k"
-TEST11="YES" # "-m ZFS   checksum off"
-TEST12="YES" # "-m ZFS4k checksum off"
-TEST13="YES" # "-m ZFS   prefetch off"
-TEST14="YES" # "-m ZFS4k prefetch off"
-TEST15="YES" # "-m ZFS   checksum off & prefetch off"
-TEST16="YES" # "-m ZFS4k checksum off & prefetch off"
-TEST17="YES" # "-m ZFS   checksum off & prefetch off & ZIL off"
-TEST18="YES" # "-m ZFS4k checksum off & prefetch off & ZIL off"
-TEST19="YES" # "-m ZFS   checksum off & prefetch off & ZIL off"
-TEST20="YES" # "-m ZFS4k checksum off & prefetch off & ZIL off"
+TEST11="YES" # "-m ZFS    checksum off"
+TEST12="YES" # "-m ZFS 4k checksum off"
+TEST13="YES" # "-m ZFS                   prefetch off"
+TEST14="YES" # "-m ZFS 4k                prefetch off"
+TEST15="YES" # "-m ZFS    checksum off & prefetch off"
+TEST16="YES" # "-m ZFS 4k checksum off & prefetch off"
+TEST17="YES" # "-m ZFS    checksum off & prefetch off & ZIL off"
+TEST18="YES" # "-m ZFS 4k checksum off & prefetch off & ZIL off"
+TEST19="YES" # "-m ZFS    checksum off & prefetch off & ZIL off"
+TEST20="YES" # "-m ZFS 4k checksum off & prefetch off & ZIL off"
 
 /bin/echo $VERSION
 /bin/echo
@@ -172,7 +174,7 @@ if [ $TEST01 == "YES" ]; then
 UFS="-O2"
 new_fs_ufs
 TESTNAME="-m UFS-O2"
-echo "TEST01 -m UFS-O2"
+/bin/echo "TEST01 -m UFS-O2"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -185,7 +187,7 @@ if [ $TEST02 == "YES" ]; then
 UFS="-O2"
 new_fs_ufs4k
 TESTNAME="-m UFS4k-O2"
-echo "TEST02 -m UFS4k-O2"
+/bin/echo "TEST02 -m UFS4k-O2"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -198,7 +200,7 @@ if [ $TEST03 == "YES" ]; then
 UFS="-O2 -U"
 new_fs_ufs
 TESTNAME="-m UFS-O2-U"
-echo "TEST03 -m UFS-O2-U"
+/bin/echo "TEST03 -m UFS-O2-U"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -211,14 +213,14 @@ if [ $TEST04 == "YES" ]; then
 UFS="-O2 -U"
 new_fs_ufs4k
 TESTNAME="-m UFS4k-O2-U"
-echo "TEST04 -m UFS4k-O2-U"
+/bin/echo "TEST04 -m UFS4k-O2-U"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
     test_dd
 fi
 TESTNAME="-m UFS4k-O2-U-snap"
-echo "TEST04 -m UFS4k-O2-U-snap"
+/bin/echo "TEST04 -m UFS4k-O2-U-snap"
 rm /mnt/fs/*
 mount -u -o snapshot /mnt/fs/.snap/test /mnt/fs
 if [ $TESTBONNIE == "YES" ]; then
@@ -233,7 +235,7 @@ if [ $TEST05 == "YES" ]; then
 UFS="-O2 -U -j"
 new_fs_ufs
 TESTNAME="-m UFS-O2-U-j"
-echo "TEST05 -m UFS-O2-U-j"
+/bin/echo "TEST05 -m UFS-O2-U-j"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -246,7 +248,7 @@ if [ $TEST06 == "YES" ]; then
 UFS="-O2 -U -j"
 new_fs_ufs4k
 TESTNAME="-m UFS4k-O2-U-j"
-echo "TEST06 -m UFS4k-O2-U-j"
+/bin/echo "TEST06 -m UFS4k-O2-U-j"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -259,7 +261,7 @@ if [ $TEST07 == "YES" ]; then
 UFS="-O2 -U -j -t"
 new_fs_ufs
 TESTNAME="-m UFS-O2-U-j-t"
-echo "TEST07 -m UFS-O2-U-j-t"
+/bin/echo "TEST07 -m UFS-O2-U-j-t"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -272,7 +274,7 @@ if [ $TEST08 == "YES" ]; then
 UFS="-O2 -U -j -t"
 new_fs_ufs4k
 TESTNAME="-m UFS4k-O2-U-j-t"
-echo "TEST08 -m UFS4k-O2-U-j-t"
+/bin/echo "TEST08 -m UFS4k-O2-U-j-t"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -288,7 +290,7 @@ fi
 if [ $TEST09 == "YES" ]; then
 new_fs_zfs
 TESTNAME="-m ZFS"
-echo "TEST09 -m ZFS"
+/bin/echo "TEST09 -m ZFS"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -300,7 +302,7 @@ fi
 if [ $TEST10 == "YES" ]; then
 new_fs_zfs4k
 TESTNAME="-m ZFS4k"
-echo "TEST10 -m ZFS4k"
+/bin/echo "TEST10 -m ZFS4k"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -313,7 +315,7 @@ CHECKSUM="OFF"
 if [ $TEST11 == "YES" ]; then
 new_fs_zfs
 TESTNAME="-m ZFS_no_cs"
-echo "TEST11 -m ZFS_no_cs"
+/bin/echo "TEST11 -m ZFS_no_cs"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -325,7 +327,7 @@ fi
 if [ $TEST12 == "YES" ]; then
 new_fs_zfs4k
 TESTNAME="-m ZFS4k_no_cs"
-echo "TEST12 -m ZFS4k_no_cs"
+/bin/echo "TEST12 -m ZFS4k_no_cs"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -342,7 +344,7 @@ CHECKSUM="ON"
 if [ $TEST13 == "YES" ]; then
 new_fs_zfs
 TESTNAME="-m ZFS_no_pf"
-echo "TEST13 -m ZFS_no_pf"
+/bin/echo "TEST13 -m ZFS_no_pf"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -354,7 +356,7 @@ fi
 if [ $TEST14 == "YES" ]; then
 new_fs_zfs4k
 TESTNAME="-m ZFS4k_no_pf"
-echo "TEST14 -m ZFS4k_no_pf"
+/bin/echo "TEST14 -m ZFS4k_no_pf"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -367,7 +369,7 @@ CHECKSUM="OFF"
 if [ $TEST15 == "YES" ]; then
 new_fs_zfs
 TESTNAME="-m ZFS_no_cs_&_no_pf"
-echo "TEST15 -m ZFS_no_cs_&_no_pf"
+/bin/echo "TEST15 -m ZFS_no_cs_&_no_pf"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -379,7 +381,7 @@ fi
 if [ $TEST16 == "YES" ]; then
 new_fs_zfs4k
 TESTNAME="-m ZFS4k_no_cs&no_pf"
-echo "TEST16 -m ZFS4k_no_cs&no_pf"
+/bin/echo "TEST16 -m ZFS4k_no_cs&no_pf"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -393,7 +395,7 @@ ZIL="OFF"
 if [ $TEST17 == "YES" ]; then
 new_fs_zfs
 TESTNAME="-m ZFS_no_cs&no_pf&no_zil"
-echo "TEST17 -m ZFS_no_cs&no_pf&no_zil"
+/bin/echo "TEST17 -m ZFS_no_cs&no_pf&no_zil"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -405,7 +407,7 @@ fi
 if [ $TEST18 == "YES" ]; then
 new_fs_zfs4k
 TESTNAME="-m ZFS4k_no_cs&no_pf&no_zil"
-echo "TEST18 -m ZFS4k_no_cs&no_pf&no_zil"
+/bin/echo "TEST18 -m ZFS4k_no_cs&no_pf&no_zil"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -418,7 +420,7 @@ CHECKSUM="OFF"
 if [ $TEST19 == "YES" ]; then
 new_fs_zfs
 TESTNAME="-m ZFS_no_cs&no_pf&no_zil"
-echo "TEST19 -m ZFS_no_cs&no_pf&no_zil"
+/bin/echo "TEST19 -m ZFS_no_cs&no_pf&no_zil"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
@@ -430,7 +432,7 @@ fi
 if [ $TEST20 == "YES" ]; then
 new_fs_zfs4k
 TESTNAME="-m ZFS4k_no_cs&no_pf&no_zil"
-echo "TEST20 -m ZFS4k_no_cs&no_pf&no_zil"
+/bin/echo "TEST20 -m ZFS4k_no_cs&no_pf&no_zil"
 if [ $TESTBONNIE == "YES" ]; then
     test_bonnie
 elif [ $TESTDD == "YES" ]; then
